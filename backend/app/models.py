@@ -1,0 +1,185 @@
+import enum
+from datetime import datetime
+
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database import Base
+
+
+class EmployeeRole(str, enum.Enum):
+    principal = "principal"
+    admin_hod = "admin_hod"
+    admin_clerk = "admin_clerk"
+    faculty_coordinator = "faculty_coordinator"
+
+
+class StudentType(str, enum.Enum):
+    inhouse = "inhouse"
+    outhouse = "outhouse"
+
+
+class CertificateCategory(str, enum.Enum):
+    fdp = "FDP"
+    external = "external"
+    nptel = "NPTEL"
+    ieee = "IEEE"
+
+
+class CertificateStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class OwnerType(str, enum.Enum):
+    student = "student"
+    employee = "employee"
+
+
+class ParticipationRole(str, enum.Enum):
+    participant = "participant"
+    organizer = "organizer"
+
+
+class AchievementMixin:
+    """Shared columns for the submit -> pending -> verify pipeline.
+
+    owner_type/employee_id exist so faculty-authored achievements have
+    somewhere to live once an Admin/Principal verification flow is built;
+    this phase's endpoints only ever write owner_type=student.
+    """
+
+    owner_type: Mapped[OwnerType] = mapped_column(Enum(OwnerType), nullable=False, default=OwnerType.student)
+    student_id: Mapped[int | None] = mapped_column(ForeignKey("students.student_id"))
+    employee_id: Mapped[int | None] = mapped_column(ForeignKey("employees.emp_id"))
+    file_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    status: Mapped[CertificateStatus] = mapped_column(
+        Enum(CertificateStatus), nullable=False, default=CertificateStatus.pending
+    )
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    verified_by: Mapped[int | None] = mapped_column(ForeignKey("employees.emp_id"))
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Department(Base):
+    __tablename__ = "departments"
+
+    dept_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dept_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    location: Mapped[str | None] = mapped_column(String(120))
+
+    employees: Mapped[list["Employee"]] = relationship(back_populates="department")
+    students: Mapped[list["Student"]] = relationship(back_populates="department")
+
+
+class Employee(Base):
+    __tablename__ = "employees"
+
+    emp_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    phone_number: Mapped[str | None] = mapped_column(String(20))
+    salary: Mapped[float | None] = mapped_column(Float)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[EmployeeRole] = mapped_column(Enum(EmployeeRole), nullable=False)
+    department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.dept_id"))
+
+    department: Mapped[Department | None] = relationship(back_populates="employees")
+    dependents: Mapped[list["Dependent"]] = relationship(back_populates="employee")
+    coordinated_students: Mapped[list["Student"]] = relationship(back_populates="coordinator")
+    verified_certificates: Mapped[list["Certificate"]] = relationship(back_populates="verifier")
+
+
+class Dependent(Base):
+    __tablename__ = "dependents"
+
+    dep_name: Mapped[str] = mapped_column(String(120), primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.emp_id"), primary_key=True)
+    relationship_: Mapped[str | None] = mapped_column("relationship", String(50))
+    age: Mapped[int | None] = mapped_column(Integer)
+
+    employee: Mapped[Employee] = relationship(back_populates="dependents")
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    proj_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    proj_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    duration: Mapped[str | None] = mapped_column(String(50))
+
+
+class Student(Base):
+    __tablename__ = "students"
+
+    student_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    student_type: Mapped[StudentType] = mapped_column(Enum(StudentType), nullable=False)
+    department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.dept_id"))
+    coordinator_id: Mapped[int | None] = mapped_column(ForeignKey("employees.emp_id"))
+
+    department: Mapped[Department | None] = relationship(back_populates="students")
+    coordinator: Mapped[Employee | None] = relationship(back_populates="coordinated_students")
+    certificates: Mapped[list["Certificate"]] = relationship(back_populates="student")
+
+
+class Certificate(Base):
+    __tablename__ = "certificates"
+
+    cert_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.student_id"), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    issuer: Mapped[str | None] = mapped_column(String(200))
+    category: Mapped[CertificateCategory] = mapped_column(Enum(CertificateCategory), nullable=False)
+    file_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    status: Mapped[CertificateStatus] = mapped_column(
+        Enum(CertificateStatus), nullable=False, default=CertificateStatus.pending
+    )
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    verified_by: Mapped[int | None] = mapped_column(ForeignKey("employees.emp_id"))
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    student: Mapped[Student] = relationship(back_populates="certificates")
+    verifier: Mapped[Employee | None] = relationship(back_populates="verified_certificates")
+
+
+class ResearchPublication(AchievementMixin, Base):
+    __tablename__ = "research_publications"
+
+    pub_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    venue: Mapped[str | None] = mapped_column(String(300))
+    publication_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Patent(AchievementMixin, Base):
+    __tablename__ = "patents"
+
+    patent_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    patent_number: Mapped[str | None] = mapped_column(String(120))
+    filing_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Internship(AchievementMixin, Base):
+    __tablename__ = "internships"
+
+    internship_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization: Mapped[str] = mapped_column(String(200), nullable=False)
+    role_title: Mapped[str | None] = mapped_column(String(200))
+    start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EventParticipation(AchievementMixin, Base):
+    __tablename__ = "event_participations"
+
+    event_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    event_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    participation_role: Mapped[ParticipationRole] = mapped_column(
+        Enum(ParticipationRole), nullable=False, default=ParticipationRole.participant
+    )

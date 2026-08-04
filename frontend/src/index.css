@@ -1,0 +1,78 @@
+:root {
+  --navy-900: #101a30;
+  --navy-800: #16223f;
+  --navy-700: #1c2c4d;
+  --gold-500: #c9a227;
+  --gold-100: #f5ecd2;
+
+  --green-600: #2f7d5c;
+  --green-100: #e4f2ec;
+  --orange-600: #c1731f;
+  --orange-100: #fbead9;
+  --red-600: #b3432f;
+  --red-100: #fbe4de;
+
+  --ink: #16223f;
+  --text: #4a5170;
+  --text-muted: #8890a8;
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --field-bg: #f0f1f5;
+  --border: #e4e6ee;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --shadow-card: 0 1px 2px rgba(16, 26, 48, 0.04), 0 8px 24px rgba(16, 26, 48, 0.05);
+
+  --sans: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  --serif: "Fraunces", Georgia, "Times New Roman", serif;
+
+  font: 15px/1.5 var(--sans);
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--ink);
+  margin: 0;
+  font-weight: 600;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--ink);
+}
