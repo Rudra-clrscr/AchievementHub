@@ -55,6 +55,12 @@ OOXML_MEDIA_FORMATS = {".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG"}
 MAX_IMAGE_DIMENSION = 2000
 IMAGE_QUALITY = 78
 COMPRESS_SIZE_THRESHOLD = 5 * 1024 * 1024
+EMBEDDED_IMAGE_SKIP_THRESHOLD = 100 * 1024
+# BILINEAR over LANCZOS: this runs on a 0.1 vCPU free-tier host, where a
+# multi-image PDF/pptx can spend a second-plus per image just resampling.
+# BILINEAR is markedly faster and, for downscaling scanned photos/screenshots,
+# not distinguishable from LANCZOS at the JPEG/WebP quality already in use.
+RESIZE_FILTER = Image.BILINEAR
 
 CONTENT_TYPES = {
     ".webp": "image/webp",
@@ -75,13 +81,16 @@ def _compress_image(raw: bytes) -> tuple[bytes, str]:
     image.load()
 
     if image.width > MAX_IMAGE_DIMENSION or image.height > MAX_IMAGE_DIMENSION:
-        image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.LANCZOS)
+        image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), RESIZE_FILTER)
 
     if image.mode not in ("RGB", "RGBA"):
         image = image.convert("RGBA" if "A" in image.mode else "RGB")
 
     buffer = io.BytesIO()
-    image.save(buffer, format="WEBP", quality=IMAGE_QUALITY, method=6)
+    # method=4 (Pillow's own default) trades a little compression ratio for
+    # meaningfully less encode time versus method=6's max-effort search --
+    # worth it on a 0.1 vCPU host where every second is felt by the user.
+    image.save(buffer, format="WEBP", quality=IMAGE_QUALITY, method=4)
     return buffer.getvalue(), ".webp"
 
 
@@ -89,7 +98,10 @@ def _recompress_pdf_images(doc: fitz.Document) -> None:
     """Downsample/re-encode every embedded image in place. This is the part
     that actually matters for real submissions -- a scanned-notes PDF is
     just full-page JPEGs behind a thin PDF wrapper, and those pages are
-    what the size budget is spent on, not the document structure."""
+    what the size budget is spent on, not the document structure. Small
+    embedded images (icons, logos, watermarks) are skipped -- on a
+    0.1 vCPU host, the decode/resample/encode cost isn't worth it for
+    something that isn't driving the file's size in the first place."""
     seen_xrefs: set[int] = set()
     for page in doc:
         for image_info in page.get_images(full=True):
@@ -99,16 +111,18 @@ def _recompress_pdf_images(doc: fitz.Document) -> None:
             seen_xrefs.add(xref)
             try:
                 extracted = doc.extract_image(xref)
+                if len(extracted["image"]) <= EMBEDDED_IMAGE_SKIP_THRESHOLD:
+                    continue
                 image = Image.open(io.BytesIO(extracted["image"]))
                 image.load()
 
                 if image.width > MAX_IMAGE_DIMENSION or image.height > MAX_IMAGE_DIMENSION:
-                    image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.LANCZOS)
+                    image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), RESIZE_FILTER)
                 if image.mode not in ("RGB", "L"):
                     image = image.convert("RGB")
 
                 buffer = io.BytesIO()
-                image.save(buffer, format="JPEG", quality=IMAGE_QUALITY, optimize=True)
+                image.save(buffer, format="JPEG", quality=IMAGE_QUALITY)
                 page.replace_image(xref, stream=buffer.getvalue())
             except Exception:
                 logger.warning("Skipping recompression of PDF image xref=%s", xref, exc_info=True)
@@ -139,12 +153,12 @@ def _compress_ooxml(raw: bytes, ext: str) -> tuple[bytes, str]:
         for item in src.infolist():
             content = src.read(item.filename)
             media_format = OOXML_MEDIA_FORMATS.get(Path(item.filename).suffix.lower())
-            if media_format and "media" in Path(item.filename).parts:
+            if media_format and "media" in Path(item.filename).parts and len(content) > EMBEDDED_IMAGE_SKIP_THRESHOLD:
                 try:
                     image = Image.open(io.BytesIO(content))
                     image.load()
                     if image.width > MAX_IMAGE_DIMENSION or image.height > MAX_IMAGE_DIMENSION:
-                        image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.LANCZOS)
+                        image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), RESIZE_FILTER)
                     if media_format == "JPEG" and image.mode not in ("RGB", "L"):
                         image = image.convert("RGB")
                     out = io.BytesIO()
