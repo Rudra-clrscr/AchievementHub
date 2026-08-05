@@ -21,6 +21,11 @@ Object storage (rather than the backend's own disk) is used specifically
 so uploads survive a free-tier host's container being recycled between
 requests -- a local-disk version of this was tried first and would have
 silently lost every file the first time the process restarted.
+
+Files at or under COMPRESS_SIZE_THRESHOLD skip compression entirely and
+are stored as-is. Re-encoding is real CPU work, and the free-tier host
+this runs on has 0.1 vCPU -- spending that on a certificate that's
+already 200KB has no size benefit and only adds latency.
 """
 
 import io
@@ -42,6 +47,7 @@ PDF_EXTENSION = ".pdf"
 
 MAX_IMAGE_DIMENSION = 2000
 IMAGE_QUALITY = 78
+COMPRESS_SIZE_THRESHOLD = 5 * 1024 * 1024
 
 CONTENT_TYPES = {
     ".webp": "image/webp",
@@ -137,7 +143,9 @@ def compress_and_store(upload: UploadFile, subfolder: str) -> CompressedUpload:
     original_content_type = upload.content_type or "application/octet-stream"
 
     try:
-        if ext in IMAGE_EXTENSIONS:
+        if original_size <= COMPRESS_SIZE_THRESHOLD:
+            data = raw
+        elif ext in IMAGE_EXTENSIONS:
             data, ext = _compress_image(raw)
         elif ext == PDF_EXTENSION:
             data, ext = _compress_pdf(raw)
