@@ -11,11 +11,15 @@ image (most real submissions are phone-scanned notes/certificates,
 which are just a handful of full-page JPEGs wrapped in a PDF shell --
 lossless stream deflate alone does ~nothing for those, since the JPEGs
 are already compressed) plus a final lossless stream deflate + unused-
-object garbage collection pass. Any other file type (docx, pptx, zip,
-...) has no safe generic compression available without risking
-corruption, so it is stored unmodified -- the "no restriction"
-guarantee still holds because it never touches the database, only
-object storage.
+object garbage collection pass. Word/PowerPoint/Excel files (.docx/
+.pptx/.xlsx) are themselves just a zip of XML parts plus embedded
+media -- same idea applies: only the media/*.{png,jpg} entries get
+recompressed in place, every XML part and relationship stays byte-
+identical, so the file still opens normally, just smaller. Any other
+file type (zip, mp4, ...) has no safe generic compression available
+without risking corruption, so it is stored unmodified -- the "no
+restriction" guarantee still holds because it never touches the
+database, only object storage.
 
 Object storage (rather than the backend's own disk) is used specifically
 so uploads survive a free-tier host's container being recycled between
@@ -31,6 +35,7 @@ already 200KB has no size benefit and only adds latency.
 import io
 import logging
 import uuid
+import zipfile
 from pathlib import Path
 
 import fitz  # PyMuPDF
@@ -44,6 +49,8 @@ logger = logging.getLogger(__name__)
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp"}
 PDF_EXTENSION = ".pdf"
+OOXML_EXTENSIONS = {".docx", ".pptx", ".xlsx"}
+OOXML_MEDIA_FORMATS = {".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG"}
 
 MAX_IMAGE_DIMENSION = 2000
 IMAGE_QUALITY = 78
@@ -116,6 +123,40 @@ def _compress_pdf(raw: bytes) -> tuple[bytes, str]:
         doc.close()
 
 
+def _compress_ooxml(raw: bytes, ext: str) -> tuple[bytes, str]:
+    """Word/PowerPoint/Excel files are a zip of XML parts plus embedded
+    media. Only media/*.{png,jpg,jpeg} entries are touched, re-saved in
+    their *original* format (never converted) so the filename extension
+    inside the zip stays truthful -- Office resolves each media part's
+    codec from that extension via [Content_Types].xml, so silently
+    swapping e.g. a .png entry for JPEG bytes would render as a broken
+    image even though the zip itself stays well-formed. Every other
+    entry (document.xml, relationships, styles, ...) is copied through
+    byte-for-byte."""
+    src = zipfile.ZipFile(io.BytesIO(raw))
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as dst:
+        for item in src.infolist():
+            content = src.read(item.filename)
+            media_format = OOXML_MEDIA_FORMATS.get(Path(item.filename).suffix.lower())
+            if media_format and "media" in Path(item.filename).parts:
+                try:
+                    image = Image.open(io.BytesIO(content))
+                    image.load()
+                    if image.width > MAX_IMAGE_DIMENSION or image.height > MAX_IMAGE_DIMENSION:
+                        image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.LANCZOS)
+                    if media_format == "JPEG" and image.mode not in ("RGB", "L"):
+                        image = image.convert("RGB")
+                    out = io.BytesIO()
+                    image.save(out, format=media_format, quality=IMAGE_QUALITY, optimize=True)
+                    if len(out.getvalue()) < len(content):
+                        content = out.getvalue()
+                except Exception:
+                    logger.warning("Skipping recompression of OOXML media %r", item.filename, exc_info=True)
+            dst.writestr(item, content)
+    return buffer.getvalue(), ext
+
+
 def _upload_to_supabase(data: bytes, path: str, content_type: str) -> str:
     upload_url = f"{settings.supabase_url}/storage/v1/object/{settings.supabase_storage_bucket}/{path}"
     response = httpx.post(
@@ -149,6 +190,8 @@ def compress_and_store(upload: UploadFile, subfolder: str) -> CompressedUpload:
             data, ext = _compress_image(raw)
         elif ext == PDF_EXTENSION:
             data, ext = _compress_pdf(raw)
+        elif ext in OOXML_EXTENSIONS:
+            data, ext = _compress_ooxml(raw, ext)
         else:
             data = raw
     except Exception:
