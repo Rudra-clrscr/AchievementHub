@@ -6,10 +6,10 @@ import { Register } from "./pages/Register";
 import { StudentDashboard } from "./pages/StudentDashboard";
 import { CoordinatorDashboard } from "./pages/CoordinatorDashboard";
 
-function RequireRole({ role, children }: { role: string; children: React.ReactNode }) {
+function RequireRole({ roles, children }: { roles: string[]; children: React.ReactNode }) {
   const { session } = useAuth();
   if (!session) return <Navigate to="/login" replace />;
-  if (session.role !== role) return <Navigate to="/login" replace />;
+  if (!roles.includes(session.role)) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
@@ -21,7 +21,7 @@ function AppRoutes() {
       <Route
         path="/student"
         element={
-          <RequireRole role="student">
+          <RequireRole roles={["student"]}>
             <StudentDashboard />
           </RequireRole>
         }
@@ -29,7 +29,7 @@ function AppRoutes() {
       <Route
         path="/coordinator"
         element={
-          <RequireRole role="faculty_coordinator">
+          <RequireRole roles={["faculty_coordinator", "admin_hod", "admin_clerk"]}>
             <CoordinatorDashboard />
           </RequireRole>
         }

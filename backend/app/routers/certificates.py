@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_coordinator, get_current_student
+from app.auth import get_current_student, get_current_verifier, verifier_scope_filter
 from app.database import get_db
 from app.models import Certificate, CertificateStatus, Employee, Student
 from app.schemas import CertificateCreate, CertificateOut, CertificateVerify
@@ -49,14 +49,14 @@ def list_my_certificates(
 
 @router.get("/pending", response_model=list[CertificateOut])
 def list_pending_certificates(
-    coordinator: Employee = Depends(get_current_coordinator),
+    verifier: Employee = Depends(get_current_verifier),
     db: Session = Depends(get_db),
 ):
     return (
         db.query(Certificate)
         .join(Student, Certificate.student_id == Student.student_id)
         .filter(
-            Student.coordinator_id == coordinator.emp_id,
+            verifier_scope_filter(verifier),
             Certificate.status == CertificateStatus.pending,
         )
         .order_by(Certificate.submitted_at.asc())
@@ -68,13 +68,13 @@ def list_pending_certificates(
 def verify_certificate(
     cert_id: int,
     payload: CertificateVerify,
-    coordinator: Employee = Depends(get_current_coordinator),
+    verifier: Employee = Depends(get_current_verifier),
     db: Session = Depends(get_db),
 ):
     certificate = (
         db.query(Certificate)
         .join(Student, Certificate.student_id == Student.student_id)
-        .filter(Certificate.cert_id == cert_id, Student.coordinator_id == coordinator.emp_id)
+        .filter(Certificate.cert_id == cert_id, verifier_scope_filter(verifier))
         .first()
     )
     if certificate is None:
@@ -87,7 +87,7 @@ def verify_certificate(
         )
 
     certificate.status = CertificateStatus.approved if payload.approve else CertificateStatus.rejected
-    certificate.verified_by = coordinator.emp_id
+    certificate.verified_by = verifier.emp_id
     certificate.verified_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(certificate)

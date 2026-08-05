@@ -6,6 +6,12 @@ import { Sidebar, TopBar, useDisplayName, type NavItem } from "../components/She
 
 const NAV_ITEMS: NavItem[] = ACHIEVEMENT_TYPES.map((t) => ({ key: t.key, label: t.label }));
 
+const ROLE_LABELS: Record<string, string> = {
+  faculty_coordinator: "Faculty coordinator",
+  admin_hod: "Admin (HOD)",
+  admin_clerk: "Admin (Clerk)",
+};
+
 export function CoordinatorDashboard() {
   const { session } = useAuth();
   const [view, setView] = useState<string>(ACHIEVEMENT_TYPES[0].key);
@@ -14,6 +20,7 @@ export function CoordinatorDashboard() {
   const [pendingCount, setPendingCount] = useState(0);
 
   const activeType = ACHIEVEMENT_TYPES.find((t) => t.key === view)!;
+  const roleLabel = ROLE_LABELS[session!.role] ?? session!.role;
 
   return (
     <div className="app-shell">
@@ -23,7 +30,7 @@ export function CoordinatorDashboard() {
         <div className="page">
           <div className="page-header">
             <div>
-              <div className="greeting-eyebrow">Faculty coordinator</div>
+              <div className="greeting-eyebrow">{roleLabel}</div>
               <div className="greeting-name">{activeType.label}</div>
             </div>
           </div>

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_coordinator, get_current_student
+from app.auth import get_current_student, get_current_verifier, verifier_scope_filter
 from app.database import get_db
 from app.models import CertificateStatus, Employee, OwnerType, Student
 from app.schemas import CertificateVerify
@@ -22,7 +22,10 @@ def build_achievement_router(
     """Generates the submit -> pending -> verify endpoints shared by every
     achievement type (Certificates included the pattern first, in
     app/routers/certificates.py). owner_type is always forced to
-    OwnerType.student here -- there is no faculty verifier defined yet."""
+    OwnerType.student here -- there is no faculty-submitting-their-own-
+    achievement verifier defined yet. Verification itself (pending/verify)
+    is open to both faculty coordinators and Admin HOD/Clerk, scoped
+    differently per verifier_scope_filter."""
 
     router = APIRouter(prefix=prefix, tags=[tag])
     id_column = getattr(model, id_attr)
@@ -61,14 +64,14 @@ def build_achievement_router(
 
     @router.get("/pending", response_model=list[out_schema])
     def list_pending(
-        coordinator: Employee = Depends(get_current_coordinator),
+        verifier: Employee = Depends(get_current_verifier),
         db: Session = Depends(get_db),
     ):
         return (
             db.query(model)
             .join(Student, model.student_id == Student.student_id)
             .filter(
-                Student.coordinator_id == coordinator.emp_id,
+                verifier_scope_filter(verifier),
                 model.status == CertificateStatus.pending,
             )
             .order_by(model.submitted_at.asc())
@@ -79,13 +82,13 @@ def build_achievement_router(
     def verify(
         record_id: int,
         payload: CertificateVerify,
-        coordinator: Employee = Depends(get_current_coordinator),
+        verifier: Employee = Depends(get_current_verifier),
         db: Session = Depends(get_db),
     ):
         record = (
             db.query(model)
             .join(Student, model.student_id == Student.student_id)
-            .filter(id_column == record_id, Student.coordinator_id == coordinator.emp_id)
+            .filter(id_column == record_id, verifier_scope_filter(verifier))
             .first()
         )
         if record is None:
@@ -98,7 +101,7 @@ def build_achievement_router(
             )
 
         record.status = CertificateStatus.approved if payload.approve else CertificateStatus.rejected
-        record.verified_by = coordinator.emp_id
+        record.verified_by = verifier.emp_id
         record.verified_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(record)

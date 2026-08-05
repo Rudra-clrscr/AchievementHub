@@ -47,16 +47,35 @@ def get_current_student(
     return student
 
 
-def get_current_coordinator(
+VERIFIER_ROLES = {
+    EmployeeRole.faculty_coordinator.value,
+    EmployeeRole.admin_hod.value,
+    EmployeeRole.admin_clerk.value,
+}
+
+
+def get_current_verifier(
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
 ) -> Employee:
     payload = _decode_token(token)
-    if payload.get("entity_type") != "employee" or payload.get("role") != EmployeeRole.faculty_coordinator.value:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Faculty coordinator access only")
+    if payload.get("entity_type") != "employee" or payload.get("role") not in VERIFIER_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Faculty coordinator or admin access only")
     employee = db.get(Employee, int(payload["sub"]))
     if employee is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Employee not found")
     return employee
+
+
+def verifier_scope_filter(employee: Employee):
+    """A faculty coordinator only sees/acts on their own assigned students
+    (one coordinator per class, per the spec). An Admin (HOD/Clerk) sees/
+    acts on every student in their department -- one tier up, matching the
+    spec's "Admin ... Department level" scope. Principal is out of scope
+    here; that role is about global monitoring/reporting, not verification.
+    """
+    if employee.role == EmployeeRole.faculty_coordinator:
+        return Student.coordinator_id == employee.emp_id
+    return Student.department_id == employee.department_id
 
 
 def get_current_identity(

@@ -40,10 +40,22 @@ def run():
             coordinator_id=coordinator.emp_id,
         )
         db.add(student)
+
+        admin_hod = Employee(
+            name="Dr. Vikram Nair",
+            email="hod@example.edu",
+            phone_number="9888888888",
+            salary=120000,
+            password_hash=hash_password("hod123"),
+            role=EmployeeRole.admin_hod,
+            department_id=dept.dept_id,
+        )
+        db.add(admin_hod)
         db.commit()
 
         print("Seeded:")
         print(f"  coordinator login: coordinator@example.edu / coordinator123")
+        print(f"  admin (HOD) login: hod@example.edu / hod123")
         print(f"  student login:     student@example.edu / student123")
     finally:
         db.close()
