@@ -6,12 +6,16 @@ Storage; only the resulting public URL is ever persisted in a row.
 
 Images are always re-encoded to WebP (near-universal browser support,
 smaller than PNG/JPEG at equivalent visual quality) and capped to a
-max dimension. PDFs are recompressed in place via PyMuPDF's stream
-deflate + unused-object garbage collection, which is lossless for the
-document content. Any other file type (docx, pptx, zip, ...) has no
-safe generic compression available without risking corruption, so it
-is stored unmodified -- the "no restriction" guarantee still holds
-because it never touches the database, only object storage.
+max dimension. PDFs get the same treatment applied to every embedded
+image (most real submissions are phone-scanned notes/certificates,
+which are just a handful of full-page JPEGs wrapped in a PDF shell --
+lossless stream deflate alone does ~nothing for those, since the JPEGs
+are already compressed) plus a final lossless stream deflate + unused-
+object garbage collection pass. Any other file type (docx, pptx, zip,
+...) has no safe generic compression available without risking
+corruption, so it is stored unmodified -- the "no restriction"
+guarantee still holds because it never touches the database, only
+object storage.
 
 Object storage (rather than the backend's own disk) is used specifically
 so uploads survive a free-tier host's container being recycled between
@@ -20,6 +24,7 @@ silently lost every file the first time the process restarted.
 """
 
 import io
+import logging
 import uuid
 from pathlib import Path
 
@@ -30,11 +35,13 @@ from PIL import Image
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp"}
 PDF_EXTENSION = ".pdf"
 
 MAX_IMAGE_DIMENSION = 2000
-WEBP_QUALITY = 78
+IMAGE_QUALITY = 78
 
 CONTENT_TYPES = {
     ".webp": "image/webp",
@@ -61,13 +68,43 @@ def _compress_image(raw: bytes) -> tuple[bytes, str]:
         image = image.convert("RGBA" if "A" in image.mode else "RGB")
 
     buffer = io.BytesIO()
-    image.save(buffer, format="WEBP", quality=WEBP_QUALITY, method=6)
+    image.save(buffer, format="WEBP", quality=IMAGE_QUALITY, method=6)
     return buffer.getvalue(), ".webp"
+
+
+def _recompress_pdf_images(doc: fitz.Document) -> None:
+    """Downsample/re-encode every embedded image in place. This is the part
+    that actually matters for real submissions -- a scanned-notes PDF is
+    just full-page JPEGs behind a thin PDF wrapper, and those pages are
+    what the size budget is spent on, not the document structure."""
+    seen_xrefs: set[int] = set()
+    for page in doc:
+        for image_info in page.get_images(full=True):
+            xref = image_info[0]
+            if xref in seen_xrefs:
+                continue
+            seen_xrefs.add(xref)
+            try:
+                extracted = doc.extract_image(xref)
+                image = Image.open(io.BytesIO(extracted["image"]))
+                image.load()
+
+                if image.width > MAX_IMAGE_DIMENSION or image.height > MAX_IMAGE_DIMENSION:
+                    image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.LANCZOS)
+                if image.mode not in ("RGB", "L"):
+                    image = image.convert("RGB")
+
+                buffer = io.BytesIO()
+                image.save(buffer, format="JPEG", quality=IMAGE_QUALITY, optimize=True)
+                page.replace_image(xref, stream=buffer.getvalue())
+            except Exception:
+                logger.warning("Skipping recompression of PDF image xref=%s", xref, exc_info=True)
 
 
 def _compress_pdf(raw: bytes) -> tuple[bytes, str]:
     doc = fitz.open(stream=raw, filetype="pdf")
     try:
+        _recompress_pdf_images(doc)
         return doc.tobytes(garbage=4, deflate=True, deflate_images=True, deflate_fonts=True), ".pdf"
     finally:
         doc.close()
@@ -109,6 +146,7 @@ def compress_and_store(upload: UploadFile, subfolder: str) -> CompressedUpload:
     except Exception:
         # Corrupt/unrecognized payload despite the extension -- fall back to
         # storing the original bytes rather than failing the submission.
+        logger.warning("Compression failed for upload %r, storing original bytes", upload.filename, exc_info=True)
         data, ext = raw, ext or ""
 
     content_type = CONTENT_TYPES.get(ext, original_content_type)
