@@ -689,6 +689,18 @@
   text-decoration: underline;
   white-space: nowrap;
 }
+.assign-select {
+  flex-shrink: 0;
+  background: var(--field-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.assign-select:disabled {
+  opacity: 0.6;
+}
 @media (max-width: 560px) {
   .queue-row .achievement-body {
     flex-basis: 100%;

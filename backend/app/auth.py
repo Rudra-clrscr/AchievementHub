@@ -66,6 +66,29 @@ def get_current_verifier(
     return employee
 
 
+ADMIN_ROLES = {
+    EmployeeRole.admin_hod.value,
+    EmployeeRole.admin_clerk.value,
+}
+
+
+def get_current_admin(
+    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+) -> Employee:
+    """Stricter than get_current_verifier: only Admin (HOD/Clerk), not
+    faculty coordinators. Assigning which coordinator a student belongs to
+    is an admin-level action -- a coordinator reassigning their own
+    students would be able to hand off the students they don't want to
+    review, which defeats the point of the assignment."""
+    payload = _decode_token(token)
+    if payload.get("entity_type") != "employee" or payload.get("role") not in ADMIN_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access only")
+    employee = db.get(Employee, int(payload["sub"]))
+    if employee is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Employee not found")
+    return employee
+
+
 def verifier_scope_filter(employee: Employee):
     """A faculty coordinator only sees/acts on their own assigned students
     (one coordinator per class, per the spec). An Admin (HOD/Clerk) sees/

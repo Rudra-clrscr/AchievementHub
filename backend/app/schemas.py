@@ -161,3 +161,23 @@ class StudentOut(BaseModel):
     student_type: StudentType
 
     model_config = {"from_attributes": True}
+
+
+class CoordinatorOut(BaseModel):
+    emp_id: int
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
+class StudentAdminOut(BaseModel):
+    student_id: int
+    name: str
+    email: str
+    department_id: int | None
+    coordinator_id: int | None
+    coordinator_name: str | None
+
+
+class AssignCoordinatorRequest(BaseModel):
+    coordinator_id: int
