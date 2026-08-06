@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import "./App.css";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { Landing } from "./pages/Landing";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 import { StudentDashboard } from "./pages/StudentDashboard";
@@ -16,6 +17,7 @@ function RequireRole({ roles, children }: { roles: string[]; children: React.Rea
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route
@@ -34,7 +36,7 @@ function AppRoutes() {
           </RequireRole>
         }
       />
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

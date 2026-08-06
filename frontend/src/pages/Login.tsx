@@ -1,7 +1,12 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+
+const SUBTITLE_BY_INTENT: Record<string, string> = {
+  student: "Sign in to submit and track your achievements",
+  faculty: "Sign in to review and verify student submissions",
+};
 
 export function Login() {
   const [email, setEmail] = useState("");
@@ -10,6 +15,9 @@ export function Login() {
   const [submitting, setSubmitting] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const intent = searchParams.get("as") ?? "";
+  const subtitle = SUBTITLE_BY_INTENT[intent] ?? "Sign in to continue to your AchievementHub account";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +47,7 @@ export function Login() {
       <div className="auth-panel-form">
         <div className="auth-card">
           <h1 className="auth-title">Welcome back</h1>
-          <p className="auth-subtitle">Sign in to continue to your AchievementHub account</p>
+          <p className="auth-subtitle">{subtitle}</p>
 
           <form onSubmit={handleSubmit}>
             <div className="field">
@@ -60,6 +68,9 @@ export function Login() {
             New to AchievementHub? <Link to="/register">Create an account</Link>
           </p>
           <p className="auth-footer">Faculty & Admin use the same sign-in form.</p>
+          <p className="auth-footer">
+            <Link to="/">&larr; Back</Link>
+          </p>
         </div>
       </div>
     </div>
