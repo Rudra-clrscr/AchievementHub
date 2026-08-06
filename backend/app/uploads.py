@@ -21,6 +21,18 @@ without risking corruption, so it is stored unmodified -- the "no
 restriction" guarantee still holds because it never touches the
 database, only object storage.
 
+Every image (standalone, PDF-embedded, or OOXML media) is first run
+through a cheap classifier (see _classify_image) that buckets it as a
+"photo", a "graphic", or near-bilevel "text" using a downsampled
+grayscale histogram, then routed to the codec/quality suited to that
+content -- one flat q=78 lossy pass is fine for a photo but visibly
+rings around scanned text edges and wastes bits on flat screenshot
+backgrounds. This is the same idea as Adobe's Mixed Raster Content
+split (separate handling for text vs. background vs. photo layers),
+scoped down to per-image routing rather than per-pixel layer
+decomposition -- the latter would need numpy/opencv-grade image
+segmentation, which is not worth the CPU on a 0.1 vCPU host.
+
 Object storage (rather than the backend's own disk) is used specifically
 so uploads survive a free-tier host's container being recycled between
 requests -- a local-disk version of this was tried first and would have
@@ -54,13 +66,57 @@ OOXML_MEDIA_FORMATS = {".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG"}
 
 MAX_IMAGE_DIMENSION = 2000
 IMAGE_QUALITY = 78
-COMPRESS_SIZE_THRESHOLD = 5 * 1024 * 1024
 EMBEDDED_IMAGE_SKIP_THRESHOLD = 100 * 1024
 # BILINEAR over LANCZOS: this runs on a 0.1 vCPU free-tier host, where a
 # multi-image PDF/pptx can spend a second-plus per image just resampling.
 # BILINEAR is markedly faster and, for downscaling scanned photos/screenshots,
 # not distinguishable from LANCZOS at the JPEG/WebP quality already in use.
 RESIZE_FILTER = Image.BILINEAR
+
+# Whole-file size target. Files at or under this are already within budget
+# and skip compression entirely -- re-encoding is real CPU work on a 0.1
+# vCPU host, not worth spending on a file that doesn't need it. Files above
+# it are compressed down towards this ceiling; there's no separate "floor"
+# enforcement (nothing pads a file back up to 250KB) since the quality
+# floors below already stop us well short of over-compressing that far in
+# the dominant real case (a handful of full-page scans per submission).
+TARGET_MAX_FILE_SIZE = 500 * 1024
+COMPRESS_SIZE_THRESHOLD = TARGET_MAX_FILE_SIZE
+# For multi-image PDFs/OOXML files, TARGET_MAX_FILE_SIZE is split evenly
+# across embedded images. Below this per-image floor, quality wins over
+# hitting the whole-file target exactly -- a 20-page scanned PDF divided
+# into a ~25KB-per-page budget would need to crush every page to mush to
+# hit 500KB total, which damages legibility for no good reason.
+MIN_PER_IMAGE_BUDGET = 60 * 1024
+
+# Cheap element-type classification (see _classify_image) buckets each image
+# as "photo", "graphic" (flat-color line art/screenshots), or near-bilevel
+# "text" (plain scans), then routes it through a two-attempt quality/size
+# ladder: attempt 0 uses the tuned profile for that content type; if the
+# result still exceeds its size budget, attempt 1 retries once more with a
+# tighter profile and returns whatever that produces. Exactly two attempts,
+# never an open-ended search -- this runs inline in the HTTP request on a
+# 0.1 vCPU host, so bounded, predictable latency matters more than shaving
+# the last few KB off an outlier image.
+DIMENSION_LADDER = (MAX_IMAGE_DIMENSION, 1400)
+# quality per element type, indexed by attempt number. For "text", these are
+# only the *lossy fallback* qualities -- attempt 0 first tries lossless
+# encoding (see TEXT_LOSSLESS_MAX_PIXELS) and only falls through to the
+# quality number here if the image is too large for lossless to stay cheap.
+QUALITY_LADDER = {
+    "photo": (IMAGE_QUALITY, 55),
+    "graphic": (90, 70),
+    "text": (92, 75),
+}
+DOMINANT_BIN_RADIUS = 12
+GRAPHIC_DOMINANT_FRACTION = 0.55
+TEXT_DOMINANT_FRACTION = 0.85
+# Pixel-count cap on the *working* (already downsized) image before we'll
+# attempt lossless encoding for "text"-classified images. Lossless WebP/PNG
+# is fast on genuinely near-bilevel content (little entropy to search) but
+# the cost still scales with pixel count, so this bounds worst-case time on
+# an oversized scan rather than trusting the classifier alone.
+TEXT_LOSSLESS_MAX_PIXELS = 2_000_000
 
 CONTENT_TYPES = {
     ".webp": "image/webp",
@@ -76,22 +132,73 @@ class CompressedUpload:
         self.content_type = content_type
 
 
+def _classify_image(image: Image.Image) -> str:
+    """Cheap element-type heuristic modeled on Adobe's Mixed Raster Content
+    split: a page/embedded image is either a "photo" (continuous tone, no
+    single dominant band), a "graphic" (a flat background/UI-chrome tone
+    covers most of it, but with real color content on top -- diagrams,
+    screenshots, color scans), or near-bilevel "text" (a flat tone -- paper,
+    typically -- covers almost all of it, e.g. an ordinary B&W scan).
+    Computed on the full-resolution grayscale histogram -- deliberately
+    *not* pre-downsampled: a resize blurs sharp black-on-white text into a
+    wide spread of mid-grays before the histogram ever sees it, which
+    washes out exactly the bimodal signal this heuristic looks for.
+    Pillow's histogram() is a single fast C-level pass, so skipping the
+    resize is both more accurate and cheaper (no interpolation cost)."""
+    gray = image.convert("L")
+    total = gray.width * gray.height
+    if total == 0:
+        return "photo"
+
+    histogram = gray.histogram()
+    peak = max(range(256), key=histogram.__getitem__)
+    lo, hi = max(0, peak - DOMINANT_BIN_RADIUS), min(256, peak + DOMINANT_BIN_RADIUS + 1)
+    dominant_fraction = sum(histogram[lo:hi]) / total
+
+    if dominant_fraction >= TEXT_DOMINANT_FRACTION:
+        return "text"
+    if dominant_fraction >= GRAPHIC_DOMINANT_FRACTION:
+        return "graphic"
+    return "photo"
+
+
 def _compress_image(raw: bytes) -> tuple[bytes, str]:
     image = Image.open(io.BytesIO(raw))
     image.load()
 
-    if image.width > MAX_IMAGE_DIMENSION or image.height > MAX_IMAGE_DIMENSION:
-        image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), RESIZE_FILTER)
-
     if image.mode not in ("RGB", "RGBA"):
         image = image.convert("RGBA" if "A" in image.mode else "RGB")
+    element_type = _classify_image(image)
 
-    buffer = io.BytesIO()
-    # method=4 (Pillow's own default) trades a little compression ratio for
-    # meaningfully less encode time versus method=6's max-effort search --
-    # worth it on a 0.1 vCPU host where every second is felt by the user.
-    image.save(buffer, format="WEBP", quality=IMAGE_QUALITY, method=4)
-    return buffer.getvalue(), ".webp"
+    data = b""
+    # Two-attempt size-budget ladder: attempt 0 uses the profile tuned for
+    # this element type; only if that's still over TARGET_MAX_FILE_SIZE do
+    # we retry once more, tighter. See the DIMENSION_LADDER/QUALITY_LADDER
+    # comment above for why this stops at two attempts rather than
+    # searching for an exact fit.
+    for attempt, dimension_cap in enumerate(DIMENSION_LADDER):
+        working = image
+        if working.width > dimension_cap or working.height > dimension_cap:
+            working = working.copy()
+            working.thumbnail((dimension_cap, dimension_cap), RESIZE_FILTER)
+
+        buffer = io.BytesIO()
+        if element_type == "text" and attempt == 0 and working.width * working.height <= TEXT_LOSSLESS_MAX_PIXELS:
+            # Near-bilevel scan: lossless WebP -- like JBIG2's template reuse
+            # for repeated glyph shapes -- shrinks this far below what lossy
+            # quantization would, without the ringing that blurs small text.
+            working.save(buffer, format="WEBP", lossless=True, method=4)
+        else:
+            # method=4 (Pillow's own default) trades a little compression
+            # ratio for meaningfully less encode time versus method=6's
+            # max-effort search -- worth it on a 0.1 vCPU host where every
+            # second is felt by the user.
+            working.save(buffer, format="WEBP", quality=QUALITY_LADDER[element_type][attempt], method=4)
+        data = buffer.getvalue()
+
+        if len(data) <= TARGET_MAX_FILE_SIZE or attempt == len(DIMENSION_LADDER) - 1:
+            break
+    return data, ".webp"
 
 
 def _recompress_pdf_images(doc: fitz.Document) -> None:
@@ -101,31 +208,55 @@ def _recompress_pdf_images(doc: fitz.Document) -> None:
     what the size budget is spent on, not the document structure. Small
     embedded images (icons, logos, watermarks) are skipped -- on a
     0.1 vCPU host, the decode/resample/encode cost isn't worth it for
-    something that isn't driving the file's size in the first place."""
+    something that isn't driving the file's size in the first place.
+
+    TARGET_MAX_FILE_SIZE is a *whole-file* target, so it's split evenly
+    across the embedded images being recompressed (floored at
+    MIN_PER_IMAGE_BUDGET -- see its definition for why)."""
     seen_xrefs: set[int] = set()
+    xrefs: list[int] = []
     for page in doc:
         for image_info in page.get_images(full=True):
             xref = image_info[0]
-            if xref in seen_xrefs:
-                continue
-            seen_xrefs.add(xref)
-            try:
-                extracted = doc.extract_image(xref)
-                if len(extracted["image"]) <= EMBEDDED_IMAGE_SKIP_THRESHOLD:
-                    continue
-                image = Image.open(io.BytesIO(extracted["image"]))
-                image.load()
+            if xref not in seen_xrefs:
+                seen_xrefs.add(xref)
+                xrefs.append(xref)
 
-                if image.width > MAX_IMAGE_DIMENSION or image.height > MAX_IMAGE_DIMENSION:
-                    image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), RESIZE_FILTER)
-                if image.mode not in ("RGB", "L"):
-                    image = image.convert("RGB")
+    size_budget = max(TARGET_MAX_FILE_SIZE // max(len(xrefs), 1), MIN_PER_IMAGE_BUDGET)
+
+    for xref in xrefs:
+        try:
+            extracted = doc.extract_image(xref)
+            if len(extracted["image"]) <= EMBEDDED_IMAGE_SKIP_THRESHOLD:
+                continue
+            image = Image.open(io.BytesIO(extracted["image"]))
+            image.load()
+            if image.mode not in ("RGB", "L"):
+                image = image.convert("RGB")
+            element_type = _classify_image(image)
+
+            data = b""
+            for attempt, dimension_cap in enumerate(DIMENSION_LADDER):
+                working = image
+                if working.width > dimension_cap or working.height > dimension_cap:
+                    working = working.copy()
+                    working.thumbnail((dimension_cap, dimension_cap), RESIZE_FILTER)
 
                 buffer = io.BytesIO()
-                image.save(buffer, format="JPEG", quality=IMAGE_QUALITY)
-                page.replace_image(xref, stream=buffer.getvalue())
-            except Exception:
-                logger.warning("Skipping recompression of PDF image xref=%s", xref, exc_info=True)
+                if element_type == "text" and attempt == 0 and working.width * working.height <= TEXT_LOSSLESS_MAX_PIXELS:
+                    # Lossless: PDF viewers decode PNG streams natively via
+                    # replace_image, and near-bilevel scan content is cheap
+                    # to encode losslessly (little entropy to search).
+                    working.save(buffer, format="PNG", compress_level=6)
+                else:
+                    working.save(buffer, format="JPEG", quality=QUALITY_LADDER[element_type][attempt])
+                data = buffer.getvalue()
+
+                if len(data) <= size_budget or attempt == len(DIMENSION_LADDER) - 1:
+                    break
+            page.replace_image(xref, stream=data)
+        except Exception:
+            logger.warning("Skipping recompression of PDF image xref=%s", xref, exc_info=True)
 
 
 def _compress_pdf(raw: bytes) -> tuple[bytes, str]:
@@ -148,23 +279,52 @@ def _compress_ooxml(raw: bytes, ext: str) -> tuple[bytes, str]:
     entry (document.xml, relationships, styles, ...) is copied through
     byte-for-byte."""
     src = zipfile.ZipFile(io.BytesIO(raw))
+
+    def _is_eligible(item: zipfile.ZipInfo) -> bool:
+        return bool(
+            OOXML_MEDIA_FORMATS.get(Path(item.filename).suffix.lower())
+            and "media" in Path(item.filename).parts
+            and item.file_size > EMBEDDED_IMAGE_SKIP_THRESHOLD
+        )
+
+    eligible_count = sum(1 for item in src.infolist() if _is_eligible(item))
+    size_budget = max(TARGET_MAX_FILE_SIZE // max(eligible_count, 1), MIN_PER_IMAGE_BUDGET)
+
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as dst:
         for item in src.infolist():
             content = src.read(item.filename)
             media_format = OOXML_MEDIA_FORMATS.get(Path(item.filename).suffix.lower())
-            if media_format and "media" in Path(item.filename).parts and len(content) > EMBEDDED_IMAGE_SKIP_THRESHOLD:
+            if media_format and _is_eligible(item):
                 try:
                     image = Image.open(io.BytesIO(content))
                     image.load()
-                    if image.width > MAX_IMAGE_DIMENSION or image.height > MAX_IMAGE_DIMENSION:
-                        image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), RESIZE_FILTER)
                     if media_format == "JPEG" and image.mode not in ("RGB", "L"):
                         image = image.convert("RGB")
-                    out = io.BytesIO()
-                    image.save(out, format=media_format, quality=IMAGE_QUALITY, optimize=True)
-                    if len(out.getvalue()) < len(content):
-                        content = out.getvalue()
+                    # PNG entries stay PNG -- format is fixed by the original
+                    # extension (Office resolves codec from it) -- so
+                    # classification only changes the JPEG quality ladder.
+                    element_type = _classify_image(image) if media_format == "JPEG" else "graphic"
+
+                    out_bytes = content
+                    for attempt, dimension_cap in enumerate(DIMENSION_LADDER):
+                        working = image
+                        if working.width > dimension_cap or working.height > dimension_cap:
+                            working = working.copy()
+                            working.thumbnail((dimension_cap, dimension_cap), RESIZE_FILTER)
+
+                        out = io.BytesIO()
+                        if media_format == "JPEG":
+                            working.save(out, format="JPEG", quality=QUALITY_LADDER[element_type][attempt], optimize=True)
+                        else:
+                            working.save(out, format="PNG", optimize=True)
+                        out_bytes = out.getvalue()
+
+                        if len(out_bytes) <= size_budget or attempt == len(DIMENSION_LADDER) - 1:
+                            break
+
+                    if len(out_bytes) < len(content):
+                        content = out_bytes
                 except Exception:
                     logger.warning("Skipping recompression of OOXML media %r", item.filename, exc_info=True)
             dst.writestr(item, content)
