@@ -17,6 +17,23 @@
   opacity: 0.55;
   cursor: not-allowed;
 }
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: btn-spin 0.7s linear infinite;
+}
+.btn-outline .btn-spinner {
+  border-color: rgba(74, 81, 112, 0.25);
+  border-top-color: var(--text);
+}
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .btn-primary {
   background: var(--navy-900);
   color: #fff;

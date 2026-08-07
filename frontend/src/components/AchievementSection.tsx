@@ -49,8 +49,9 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
   const [file, setFile] = useState<File | null>(null);
   const [records, setRecords] = useState<AchievementRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [stage, setStage] = useState<"uploading" | "saving" | null>(null);
   const [lastCompression, setLastCompression] = useState<string | null>(null);
+  const submitting = stage !== null;
 
   const refresh = () => {
     api.mine(token).then(setRecords).catch(() => setError(`Failed to load ${title.toLowerCase()}`));
@@ -65,7 +66,7 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
       setError("Attach a file (any type, any size) to submit.");
       return;
     }
-    setSubmitting(true);
+    setStage("uploading");
     try {
       const uploaded = await uploadFile(token, category, file);
       setLastCompression(
@@ -76,6 +77,7 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
       for (const f of fields) {
         if (form[f.name]) payload[f.name] = form[f.name];
       }
+      setStage("saving");
       await api.submit(token, payload);
       setForm(emptyForm);
       setFile(null);
@@ -83,8 +85,13 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Submission failed");
     } finally {
-      setSubmitting(false);
+      setStage(null);
     }
+  };
+
+  const STAGE_LABEL: Record<string, string> = {
+    uploading: "Compressing & uploading...",
+    saving: "Saving...",
   };
 
   const titleField = fields[0];
@@ -140,7 +147,8 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
 
         <div className="form-actions">
           <button className="btn btn-primary" type="submit" disabled={submitting}>
-            {submitting ? "Uploading & submitting..." : "Submit for verification"}
+            {submitting && <span className="btn-spinner" aria-hidden="true" />}
+            {stage ? STAGE_LABEL[stage] : "Submit for verification"}
           </button>
         </div>
       </form>

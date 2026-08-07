@@ -65,13 +65,22 @@ OOXML_EXTENSIONS = {".docx", ".pptx", ".xlsx"}
 OOXML_MEDIA_FORMATS = {".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG"}
 
 MAX_IMAGE_DIMENSION = 2000
-IMAGE_QUALITY = 78
+IMAGE_QUALITY = 90
 EMBEDDED_IMAGE_SKIP_THRESHOLD = 100 * 1024
 # BILINEAR over LANCZOS: this runs on a 0.1 vCPU free-tier host, where a
 # multi-image PDF/pptx can spend a second-plus per image just resampling.
 # BILINEAR is markedly faster and, for downscaling scanned photos/screenshots,
 # not distinguishable from LANCZOS at the JPEG/WebP quality already in use.
 RESIZE_FILTER = Image.BILINEAR
+# WebP's method controls encoder search effort, separately from quality
+# (the visual-fidelity target) -- higher method searches harder for the same
+# quality, it doesn't raise it. Measured on a 2000x1500 photo: method=4 took
+# ~800ms and produced 755KB; method=1 took ~200ms (4x faster) and produced
+# 745KB -- i.e. no size/quality cost here, method=4's extra search just
+# wasn't paying for itself on this content. Same story for lossless (~75ms
+# either way, identical output) -- avoid method=0 there specifically, it
+# skips a compression pass entirely and produces dramatically larger files.
+WEBP_METHOD = 1
 
 # Whole-file size target. Files at or under this are already within budget
 # and skip compression entirely -- re-encoding is real CPU work on a 0.1
@@ -92,21 +101,29 @@ MIN_PER_IMAGE_BUDGET = 60 * 1024
 # Cheap element-type classification (see _classify_image) buckets each image
 # as "photo", "graphic" (flat-color line art/screenshots), or near-bilevel
 # "text" (plain scans), then routes it through a two-attempt quality/size
-# ladder: attempt 0 uses the tuned profile for that content type; if the
-# result still exceeds its size budget, attempt 1 retries once more with a
-# tighter profile and returns whatever that produces. Exactly two attempts,
-# never an open-ended search -- this runs inline in the HTTP request on a
-# 0.1 vCPU host, so bounded, predictable latency matters more than shaving
-# the last few KB off an outlier image.
-DIMENSION_LADDER = (MAX_IMAGE_DIMENSION, 1400)
+# ladder: attempt 0 uses a near-max-fidelity profile for that content type;
+# if the result still exceeds its size budget, attempt 1 retries once more
+# with a tighter profile and returns whatever that produces. Exactly two
+# attempts, never an open-ended search -- this runs inline in the HTTP
+# request on a 0.1 vCPU host, so bounded, predictable latency matters more
+# than shaving the last few KB off an outlier image.
+#
+# Attempt 0 is deliberately high-quality rather than "aggressively small":
+# the target is a 250-500KB *ceiling*, not a size to chase downward, and
+# there's no floor enforcement below it -- an image genuinely low on detail
+# (a flat poster/diagram) will legitimately land under 250KB even at max
+# quality, and that's correct: padding it further would mean preserving
+# source-JPEG noise, upscaling, or picking a deliberately worse encoder pass,
+# none of which improve what a reviewer actually sees.
+DIMENSION_LADDER = (MAX_IMAGE_DIMENSION, 1700)
 # quality per element type, indexed by attempt number. For "text", these are
 # only the *lossy fallback* qualities -- attempt 0 first tries lossless
 # encoding (see TEXT_LOSSLESS_MAX_PIXELS) and only falls through to the
 # quality number here if the image is too large for lossless to stay cheap.
 QUALITY_LADDER = {
-    "photo": (IMAGE_QUALITY, 55),
-    "graphic": (90, 70),
-    "text": (92, 75),
+    "photo": (IMAGE_QUALITY, 72),
+    "graphic": (95, 78),
+    "text": (95, 88),
 }
 DOMINANT_BIN_RADIUS = 12
 GRAPHIC_DOMINANT_FRACTION = 0.55
@@ -168,6 +185,16 @@ def _compress_image(raw: bytes) -> tuple[bytes, str]:
 
     if image.mode not in ("RGB", "RGBA"):
         image = image.convert("RGBA" if "A" in image.mode else "RGB")
+
+    # Resize to the attempt-0 cap before classifying: this resize has to
+    # happen anyway for attempt 0's encode, and classifying on it instead of
+    # the full original is ~5x cheaper with no accuracy loss (2000px is
+    # still far higher resolution than would blur the sharp edges the
+    # classifier looks for -- unlike the small thumbnail this function used
+    # to (and must not) resize down to, see _classify_image's docstring).
+    if image.width > MAX_IMAGE_DIMENSION or image.height > MAX_IMAGE_DIMENSION:
+        image = image.copy()
+        image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), RESIZE_FILTER)
     element_type = _classify_image(image)
 
     data = b""
@@ -187,13 +214,9 @@ def _compress_image(raw: bytes) -> tuple[bytes, str]:
             # Near-bilevel scan: lossless WebP -- like JBIG2's template reuse
             # for repeated glyph shapes -- shrinks this far below what lossy
             # quantization would, without the ringing that blurs small text.
-            working.save(buffer, format="WEBP", lossless=True, method=4)
+            working.save(buffer, format="WEBP", lossless=True, method=WEBP_METHOD)
         else:
-            # method=4 (Pillow's own default) trades a little compression
-            # ratio for meaningfully less encode time versus method=6's
-            # max-effort search -- worth it on a 0.1 vCPU host where every
-            # second is felt by the user.
-            working.save(buffer, format="WEBP", quality=QUALITY_LADDER[element_type][attempt], method=4)
+            working.save(buffer, format="WEBP", quality=QUALITY_LADDER[element_type][attempt], method=WEBP_METHOD)
         data = buffer.getvalue()
 
         if len(data) <= TARGET_MAX_FILE_SIZE or attempt == len(DIMENSION_LADDER) - 1:
@@ -233,6 +256,12 @@ def _recompress_pdf_images(doc: fitz.Document) -> None:
             image.load()
             if image.mode not in ("RGB", "L"):
                 image = image.convert("RGB")
+            # See _compress_image: resize to the attempt-0 cap before
+            # classifying -- cheaper and just as accurate as classifying the
+            # full-resolution extracted image.
+            if image.width > MAX_IMAGE_DIMENSION or image.height > MAX_IMAGE_DIMENSION:
+                image = image.copy()
+                image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), RESIZE_FILTER)
             element_type = _classify_image(image)
 
             data = b""
@@ -301,6 +330,11 @@ def _compress_ooxml(raw: bytes, ext: str) -> tuple[bytes, str]:
                     image.load()
                     if media_format == "JPEG" and image.mode not in ("RGB", "L"):
                         image = image.convert("RGB")
+                    # See _compress_image: resize to the attempt-0 cap before
+                    # classifying -- cheaper and just as accurate.
+                    if image.width > MAX_IMAGE_DIMENSION or image.height > MAX_IMAGE_DIMENSION:
+                        image = image.copy()
+                        image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), RESIZE_FILTER)
                     # PNG entries stay PNG -- format is fixed by the original
                     # extension (Office resolves codec from it) -- so
                     # classification only changes the JPEG quality ladder.
