@@ -46,6 +46,7 @@ already 200KB has no size benefit and only adds latency.
 
 import io
 import logging
+import time
 import uuid
 import zipfile
 from pathlib import Path
@@ -97,6 +98,18 @@ COMPRESS_SIZE_THRESHOLD = TARGET_MAX_FILE_SIZE
 # into a ~25KB-per-page budget would need to crush every page to mush to
 # hit 500KB total, which damages legibility for no good reason.
 MIN_PER_IMAGE_BUDGET = 60 * 1024
+
+# Wall-clock ceiling on total time spent recompressing embedded images in a
+# single PDF/OOXML file. Per-image work is already bounded (two-attempt
+# ladder below), but nothing bounds the *count* of images -- a many-page
+# scanned PDF/pptx can take long enough on a 0.1 vCPU host that the request
+# gateway kills the connection before a response ever comes back, which the
+# browser then reports as a CORS failure (no response at all means no CORS
+# header either, even though CORS itself is configured fine). Once the
+# budget is spent, any remaining images are left at their original encoding
+# -- still a valid, complete file, just not optimized as far -- rather than
+# risking an unbounded-length request.
+RECOMPRESS_TIME_BUDGET_SECONDS = 20.0
 
 # Cheap element-type classification (see _classify_image) buckets each image
 # as "photo", "graphic" (flat-color line art/screenshots), or near-bilevel
@@ -247,7 +260,11 @@ def _recompress_pdf_images(doc: fitz.Document) -> None:
 
     size_budget = max(TARGET_MAX_FILE_SIZE // max(len(xrefs), 1), MIN_PER_IMAGE_BUDGET)
 
-    for xref in xrefs:
+    deadline = time.monotonic() + RECOMPRESS_TIME_BUDGET_SECONDS
+    for i, xref in enumerate(xrefs):
+        if time.monotonic() > deadline:
+            logger.warning("PDF recompression time budget exceeded, leaving %d image(s) unrecompressed", len(xrefs) - i)
+            break
         try:
             extracted = doc.extract_image(xref)
             if len(extracted["image"]) <= EMBEDDED_IMAGE_SKIP_THRESHOLD:
@@ -320,11 +337,14 @@ def _compress_ooxml(raw: bytes, ext: str) -> tuple[bytes, str]:
     size_budget = max(TARGET_MAX_FILE_SIZE // max(eligible_count, 1), MIN_PER_IMAGE_BUDGET)
 
     buffer = io.BytesIO()
+    deadline = time.monotonic() + RECOMPRESS_TIME_BUDGET_SECONDS
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as dst:
         for item in src.infolist():
             content = src.read(item.filename)
             media_format = OOXML_MEDIA_FORMATS.get(Path(item.filename).suffix.lower())
-            if media_format and _is_eligible(item):
+            if media_format and _is_eligible(item) and time.monotonic() > deadline:
+                logger.warning("OOXML recompression time budget exceeded, leaving %r unrecompressed", item.filename)
+            elif media_format and _is_eligible(item):
                 try:
                     image = Image.open(io.BytesIO(content))
                     image.load()
