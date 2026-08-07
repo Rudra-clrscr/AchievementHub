@@ -194,6 +194,13 @@ def _classify_image(image: Image.Image) -> str:
 
 def _compress_image(raw: bytes) -> tuple[bytes, str]:
     image = Image.open(io.BytesIO(raw))
+    # JPEG draft mode asks libjpeg to decode directly at a reduced scale
+    # instead of decoding full-resolution and shrinking after -- on a
+    # memory-constrained host, a single large scanned-page JPEG (e.g.
+    # 8000x6000) can peak at 100+MB as a raw decoded bitmap; decoding
+    # smaller in the first place avoids ever materializing that. No-op for
+    # non-JPEG formats (draft() is only meaningful on the JPEG plugin).
+    image.draft("RGB", (MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION))
     image.load()
 
     if image.mode not in ("RGB", "RGBA"):
@@ -270,6 +277,10 @@ def _recompress_pdf_images(doc: fitz.Document) -> None:
             if len(extracted["image"]) <= EMBEDDED_IMAGE_SKIP_THRESHOLD:
                 continue
             image = Image.open(io.BytesIO(extracted["image"]))
+            # See _compress_image: decode at reduced scale directly rather
+            # than full-resolution then shrinking, to bound peak memory on
+            # this host. No-op for non-JPEG.
+            image.draft("RGB", (MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION))
             image.load()
             if image.mode not in ("RGB", "L"):
                 image = image.convert("RGB")
@@ -347,6 +358,10 @@ def _compress_ooxml(raw: bytes, ext: str) -> tuple[bytes, str]:
             elif media_format and _is_eligible(item):
                 try:
                     image = Image.open(io.BytesIO(content))
+                    # See _compress_image: decode at reduced scale directly
+                    # rather than full-resolution then shrinking, to bound
+                    # peak memory on this host. No-op for non-JPEG.
+                    image.draft("RGB", (MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION))
                     image.load()
                     if media_format == "JPEG" and image.mode not in ("RGB", "L"):
                         image = image.convert("RGB")
