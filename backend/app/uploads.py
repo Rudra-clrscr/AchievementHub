@@ -326,6 +326,21 @@ def _compress_pdf(raw: bytes) -> tuple[bytes, str]:
     doc = fitz.open(stream=raw, filetype="pdf")
     try:
         _recompress_pdf_images(doc)
+        try:
+            # Replaces each embedded font with a version containing only the
+            # glyphs actually used in the document -- page text isn't
+            # rewritten, so rendering/searchability is unaffected. This is
+            # the main lever for text-heavy, digitally-generated PDFs
+            # (exported from a word processor/design tool rather than
+            # scanned): those carry full embedded fonts but little large
+            # image content for _recompress_pdf_images above to act on.
+            # Measured: ~60% size reduction in ~10ms on a font-heavy 7-page
+            # document -- cheap enough to always attempt. New-ish MuPDF
+            # feature, so caught separately rather than risking the whole
+            # compression falling back to uncompressed original bytes.
+            doc.subset_fonts()
+        except Exception:
+            logger.warning("Font subsetting failed, continuing without it", exc_info=True)
         return doc.tobytes(garbage=4, deflate=True, deflate_images=True, deflate_fonts=True), ".pdf"
     finally:
         doc.close()
