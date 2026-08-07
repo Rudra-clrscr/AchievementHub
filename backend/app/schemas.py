@@ -161,3 +161,18 @@ class StudentOut(BaseModel):
     student_type: StudentType
 
     model_config = {"from_attributes": True}
+
+
+class FeedItem(BaseModel):
+    id: int
+    type: str  # "certificate", "publication", "patent", "internship", "event"
+    title: str
+    owner_type: str
+    student_name: str | None = None
+    category: str | None = None
+    verified_at: datetime | None = None
+    file_url: str
+    is_featured: bool = False
+
+    model_config = {"from_attributes": True}
+
