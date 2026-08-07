@@ -322,25 +322,41 @@ def _recompress_pdf_images(doc: fitz.Document) -> None:
             logger.warning("Skipping recompression of PDF image xref=%s", xref, exc_info=True)
 
 
+def _strip_editor_roundtrip_data(doc: fitz.Document) -> None:
+    """Removes per-page PieceInfo/Thumb entries. Design tools (seen from
+    Adobe Illustrator exports in practice) use PieceInfo to embed the
+    *entire native source document* inside the PDF, chunked across many
+    AIPDFPrivateData objects, purely so the same app can later reopen the
+    PDF with full native editability; Thumb is a cached page-thumbnail
+    image. Neither is ever read by a PDF viewer or printer -- a viewer
+    renders the page's actual content stream, not this side data -- so
+    dropping it is lossless for anyone just viewing the document. Verified
+    render-identical (byte-for-byte matching rendered pixels) on a real
+    Illustrator-exported file where this alone cut size by over 90%
+    (2.43MB -> 159KB), with no image or font content touched.
+    garbage=4 in the final tobytes() call reclaims the now-unreferenced
+    backing objects once these keys no longer point at them.
+
+    NOTE: doc.subset_fonts() was tried here too and looked promising in
+    isolation (60%+ reduction on a synthetic test), but it silently
+    corrupted body text on this same real-world file -- Type0/CID-keyed
+    fonts rendered as stray marks instead of glyphs, with no exception
+    raised to catch. Deliberately not used for that reason."""
+    for page in doc:
+        xref = page.xref
+        for key in ("PieceInfo", "Thumb"):
+            if doc.xref_get_key(xref, key)[0] != "null":
+                doc.xref_set_key(xref, key, "null")
+
+
 def _compress_pdf(raw: bytes) -> tuple[bytes, str]:
     doc = fitz.open(stream=raw, filetype="pdf")
     try:
         _recompress_pdf_images(doc)
         try:
-            # Replaces each embedded font with a version containing only the
-            # glyphs actually used in the document -- page text isn't
-            # rewritten, so rendering/searchability is unaffected. This is
-            # the main lever for text-heavy, digitally-generated PDFs
-            # (exported from a word processor/design tool rather than
-            # scanned): those carry full embedded fonts but little large
-            # image content for _recompress_pdf_images above to act on.
-            # Measured: ~60% size reduction in ~10ms on a font-heavy 7-page
-            # document -- cheap enough to always attempt. New-ish MuPDF
-            # feature, so caught separately rather than risking the whole
-            # compression falling back to uncompressed original bytes.
-            doc.subset_fonts()
+            _strip_editor_roundtrip_data(doc)
         except Exception:
-            logger.warning("Font subsetting failed, continuing without it", exc_info=True)
+            logger.warning("Stripping editor round-trip data failed, continuing without it", exc_info=True)
         return doc.tobytes(garbage=4, deflate=True, deflate_images=True, deflate_fonts=True), ".pdf"
     finally:
         doc.close()
