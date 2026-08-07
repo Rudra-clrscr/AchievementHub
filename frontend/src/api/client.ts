@@ -121,3 +121,29 @@ export const api = {
 
   me: (token: string) => request<MeResponse>("/auth/me", {}, token),
 };
+
+export interface FeedItem {
+  id: number;
+  type: string;
+  title: string;
+  owner_type: string;
+  student_name: string | null;
+  category: string | null;
+  verified_at: string | null;
+  file_url: string;
+  is_featured: boolean;
+}
+
+export const feedApi = {
+  getLatest: (params?: { search?: string; category?: string; owner_type?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.search) query.append("search", params.search);
+    if (params?.category) query.append("category", params.category);
+    if (params?.owner_type) query.append("owner_type", params.owner_type);
+    
+    const queryString = query.toString();
+    return request<FeedItem[]>(`/feed/latest${queryString ? `?${queryString}` : ""}`);
+  },
+  getTop: () => request<FeedItem[]>("/feed/top"),
+};
+
