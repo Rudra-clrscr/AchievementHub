@@ -110,6 +110,31 @@ export interface RegisterPayload {
   department_id?: number;
 }
 
+export interface AdminStudent {
+  student_id: number;
+  name: string;
+  email: string;
+  department_id: number | null;
+  coordinator_id: number | null;
+  coordinator_name: string | null;
+}
+
+export interface Coordinator {
+  emp_id: number;
+  name: string;
+}
+
+export const studentsApi = {
+  list: (token: string) => request<AdminStudent[]>("/students", {}, token),
+  coordinators: (token: string) => request<Coordinator[]>("/students/coordinators", {}, token),
+  assignCoordinator: (token: string, studentId: number, coordinatorId: number) =>
+    request<AdminStudent>(
+      `/students/${studentId}/coordinator`,
+      { method: "PATCH", body: JSON.stringify({ coordinator_id: coordinatorId }) },
+      token
+    ),
+};
+
 export const api = {
   login: (email: string, password: string) =>
     request<TokenResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),

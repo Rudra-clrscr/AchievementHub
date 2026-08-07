@@ -17,6 +17,23 @@
   opacity: 0.55;
   cursor: not-allowed;
 }
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: btn-spin 0.7s linear infinite;
+}
+.btn-outline .btn-spinner {
+  border-color: rgba(74, 81, 112, 0.25);
+  border-top-color: var(--text);
+}
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .btn-primary {
   background: var(--navy-900);
   color: #fff;
@@ -168,6 +185,37 @@
 .auth-links {
   text-align: right;
   margin: -8px 0 20px;
+}
+
+.role-choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.role-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  background: var(--field-bg);
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.role-choice:hover {
+  border-color: var(--gold-500);
+  background: var(--gold-100);
+}
+.role-choice-title {
+  font-weight: 700;
+  color: var(--ink);
+  font-size: 15px;
+}
+.role-choice-desc {
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
 /* ---------- form fields ---------- */
@@ -657,6 +705,18 @@
   color: var(--navy-800);
   text-decoration: underline;
   white-space: nowrap;
+}
+.assign-select {
+  flex-shrink: 0;
+  background: var(--field-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.assign-select:disabled {
+  opacity: 0.6;
 }
 @media (max-width: 560px) {
   .queue-row .achievement-body {
