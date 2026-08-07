@@ -8,6 +8,28 @@ export class ApiError extends Error {
   }
 }
 
+// The backend free-tier host spins down when idle and cold-starts on the
+// next request; while it's booting, requests fail at the network level
+// (fetch() throws, there's no HTTP response at all) rather than with an
+// HTTP error -- the browser reports this as a CORS block since there's no
+// response to carry CORS headers, even though CORS itself is configured
+// fine. Retrying rides out that boot window instead of surfacing it as a
+// bare "failed" to the user. Only network-level failures are retried --
+// a real HTTP error response (4xx/5xx) is returned immediately, not
+// retried, since retrying wouldn't change a genuine error.
+const RETRY_DELAYS_MS = [1000, 3000, 8000, 15000];
+
+async function fetchWithRetry(input: string, init: RequestInit): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetch(input, init);
+    } catch (err) {
+      if (attempt >= RETRY_DELAYS_MS.length) throw err;
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+    }
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -15,7 +37,7 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await fetchWithRetry(`${API_BASE}${path}`, { ...options, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
     throw new ApiError(res.status, body.detail ?? "Request failed");
@@ -53,7 +75,7 @@ export async function uploadFile(token: string, category: UploadCategory, file: 
   body.append("category", category);
   body.append("file", file);
 
-  const res = await fetch(`${API_BASE}/uploads`, {
+  const res = await fetchWithRetry(`${API_BASE}/uploads`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body,
