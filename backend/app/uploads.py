@@ -408,6 +408,15 @@ def compress_and_store(upload: UploadFile, subfolder: str) -> CompressedUpload:
         logger.warning("Compression failed for upload %r, storing original bytes", upload.filename, exc_info=True)
         data, ext = raw, ext or ""
 
+    # Belt-and-suspenders: per-image budgets don't bound whole-file overhead
+    # (PDF restructuring, zip re-deflation, etc.), so a "compressed" result
+    # can still come out larger than the original -- e.g. a PDF whose images
+    # were already tightly encoded, where re-encoding + xref rewriting adds
+    # more than it saves. Never store something bigger than what was
+    # uploaded.
+    if len(data) >= original_size:
+        data, ext = raw, Path(upload.filename or "").suffix.lower()
+
     content_type = CONTENT_TYPES.get(ext, original_content_type)
     path = f"{subfolder}/{uuid.uuid4().hex}{ext}"
     url = _upload_to_supabase(data, path, content_type)
