@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers import auth, certificates, departments, events, internships, patents, publications, students, uploads
+from app.routers import feed
 
 app = FastAPI(title="AchievementHub API")
 
@@ -23,6 +24,7 @@ app.include_router(internships.router)
 app.include_router(events.router)
 app.include_router(students.router)
 app.include_router(uploads.router)
+app.include_router(feed.router)
 
 
 @app.get("/health")

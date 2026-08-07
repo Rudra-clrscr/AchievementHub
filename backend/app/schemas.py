@@ -163,6 +163,18 @@ class StudentOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class FeedItem(BaseModel):
+    id: int
+    type: str  # "certificate", "publication", "patent", "internship", "event"
+    title: str
+    owner_type: str
+    student_name: str | None = None
+    category: str | None = None
+    verified_at: datetime | None = None
+    file_url: str
+    is_featured: bool = False
+
+    model_config = {"from_attributes": True}
 class CoordinatorOut(BaseModel):
     emp_id: int
     name: str
@@ -178,6 +190,6 @@ class StudentAdminOut(BaseModel):
     coordinator_id: int | None
     coordinator_name: str | None
 
-
 class AssignCoordinatorRequest(BaseModel):
+    coordinator_id: int
     coordinator_id: int

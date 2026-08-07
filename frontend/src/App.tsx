@@ -6,6 +6,7 @@ import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 import { StudentDashboard } from "./pages/StudentDashboard";
 import { CoordinatorDashboard } from "./pages/CoordinatorDashboard";
+import { PublicFeed } from "./pages/PublicFeed";
 
 function RequireRole({ roles, children }: { roles: string[]; children: React.ReactNode }) {
   const { session } = useAuth();
@@ -17,7 +18,8 @@ function RequireRole({ roles, children }: { roles: string[]; children: React.Rea
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
+      <Route path="/" element={<PublicFeed />} />
+      <Route path="/landing" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route

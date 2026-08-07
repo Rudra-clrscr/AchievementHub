@@ -33,11 +33,11 @@ The system uses Role-Based Access Control (RBAC) with the following key roles:
 ## 🛠️ Technology Stack
 
 * **Frontend:** React.js (Vite), HTML5, CSS3, TypeScript
-* **Backend:** Node.js/Express.js (or FastAPI/Django)
-* **Database:** MySQL / PostgreSQL
-* **Authentication:** JWT & RBAC
+* **Backend:** Python (FastAPI)
+* **Database:** PostgreSQL
+* **Authentication:** JWT & RBAC (using Passlib & Python-Jose)
 * **Storage:** AWS S3 / Firebase Storage
-* **File Upload & Compression:** Multer, Sharp (Images), PDF-Lib/Ghostscript
+* **File Upload & Compression:** FastAPI UploadFile, Pillow (Images), PyMuPDF (PDFs)
 
 *(Note: The exact technology stack may vary depending on active development choices)*
 
