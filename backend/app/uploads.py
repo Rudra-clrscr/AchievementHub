@@ -100,8 +100,8 @@ COMPRESS_SIZE_THRESHOLD = TARGET_MAX_FILE_SIZE
 MIN_PER_IMAGE_BUDGET = 60 * 1024
 
 # Wall-clock ceiling on total time spent recompressing embedded images in a
-# single PDF/OOXML file. Per-image work is already bounded (two-attempt
-# ladder below), but nothing bounds the *count* of images -- a many-page
+# single PDF/OOXML file. Per-image work is already bounded (the ladder
+# below), but nothing bounds the *count* of images -- a many-page
 # scanned PDF/pptx can take long enough on a 0.1 vCPU host that the request
 # gateway kills the connection before a response ever comes back, which the
 # browser then reports as a CORS failure (no response at all means no CORS
@@ -113,13 +113,19 @@ RECOMPRESS_TIME_BUDGET_SECONDS = 20.0
 
 # Cheap element-type classification (see _classify_image) buckets each image
 # as "photo", "graphic" (flat-color line art/screenshots), or near-bilevel
-# "text" (plain scans), then routes it through a two-attempt quality/size
+# "text" (plain scans), then routes it through a bounded quality/size
 # ladder: attempt 0 uses a near-max-fidelity profile for that content type;
-# if the result still exceeds its size budget, attempt 1 retries once more
-# with a tighter profile and returns whatever that produces. Exactly two
-# attempts, never an open-ended search -- this runs inline in the HTTP
-# request on a 0.1 vCPU host, so bounded, predictable latency matters more
-# than shaving the last few KB off an outlier image.
+# if the result still exceeds its size budget, attempt 1 retries with a
+# tighter profile. Almost everything resolves in those first two attempts.
+# Attempt 2 exists only as a last-resort fallback for content that resists
+# compression even at attempt 1's settings (e.g. a busy diagram or a scan
+# classified "graphic"/"text", whose quality floors are deliberately kept
+# high to protect legibility) -- it drops quality/dimensions much further to
+# guarantee landing under the ceiling rather than shipping a file well over
+# target. The loop below already breaks as soon as any attempt hits budget,
+# so attempt 2's extra cost is only ever paid on the rare outlier, not on
+# every file -- this runs inline in the HTTP request on a 0.1 vCPU host, so
+# bounded, predictable latency still matters.
 #
 # Attempt 0 is deliberately high-quality rather than "aggressively small":
 # the target is a 250-500KB *ceiling*, not a size to chase downward, and
@@ -128,15 +134,15 @@ RECOMPRESS_TIME_BUDGET_SECONDS = 20.0
 # quality, and that's correct: padding it further would mean preserving
 # source-JPEG noise, upscaling, or picking a deliberately worse encoder pass,
 # none of which improve what a reviewer actually sees.
-DIMENSION_LADDER = (MAX_IMAGE_DIMENSION, 1700)
+DIMENSION_LADDER = (MAX_IMAGE_DIMENSION, 1700, 1200)
 # quality per element type, indexed by attempt number. For "text", these are
 # only the *lossy fallback* qualities -- attempt 0 first tries lossless
 # encoding (see TEXT_LOSSLESS_MAX_PIXELS) and only falls through to the
 # quality number here if the image is too large for lossless to stay cheap.
 QUALITY_LADDER = {
-    "photo": (IMAGE_QUALITY, 72),
-    "graphic": (95, 78),
-    "text": (95, 88),
+    "photo": (IMAGE_QUALITY, 72, 50),
+    "graphic": (95, 78, 55),
+    "text": (95, 88, 65),
 }
 DOMINANT_BIN_RADIUS = 12
 GRAPHIC_DOMINANT_FRACTION = 0.55
@@ -218,11 +224,11 @@ def _compress_image(raw: bytes) -> tuple[bytes, str]:
     element_type = _classify_image(image)
 
     data = b""
-    # Two-attempt size-budget ladder: attempt 0 uses the profile tuned for
-    # this element type; only if that's still over TARGET_MAX_FILE_SIZE do
-    # we retry once more, tighter. See the DIMENSION_LADDER/QUALITY_LADDER
-    # comment above for why this stops at two attempts rather than
-    # searching for an exact fit.
+    # Size-budget ladder: attempt 0 uses the profile tuned for this element
+    # type; only if that's still over TARGET_MAX_FILE_SIZE do we retry with
+    # a tighter profile, up to the last-resort attempt. See the
+    # DIMENSION_LADDER/QUALITY_LADDER comment above for why this stops
+    # there rather than searching for an exact fit.
     for attempt, dimension_cap in enumerate(DIMENSION_LADDER):
         working = image
         if working.width > dimension_cap or working.height > dimension_cap:
