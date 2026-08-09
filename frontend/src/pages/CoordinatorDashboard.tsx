@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { ACHIEVEMENT_TYPES } from "../achievementTypes";
+import { achievementsApi } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AchievementPendingSection } from "../components/AchievementSection";
 import { StudentAssignment } from "../components/StudentAssignment";
 import { Sidebar, TopBar, useDisplayName, type NavItem } from "../components/Shell";
 
 const ADMIN_ROLES = ["admin_hod", "admin_clerk"];
-const STUDENTS_KEY = "students";
 
 const ROLE_LABELS: Record<string, string> = {
   faculty_coordinator: "Faculty coordinator",
@@ -18,15 +17,14 @@ export function CoordinatorDashboard() {
   const { session } = useAuth();
   const isAdmin = ADMIN_ROLES.includes(session!.role);
   const navItems: NavItem[] = [
-    ...ACHIEVEMENT_TYPES.map((t) => ({ key: t.key, label: t.label })),
-    ...(isAdmin ? [{ key: STUDENTS_KEY, label: "Students" }] : []),
+    { key: "achievements", label: "Achievements" },
+    ...(isAdmin ? [{ key: "students", label: "Students" }] : []),
   ];
-  const [view, setView] = useState<string>(ACHIEVEMENT_TYPES[0].key);
+  const [view, setView] = useState<string>("achievements");
   const token = session!.token;
   const name = useDisplayName(token);
   const [pendingCount, setPendingCount] = useState(0);
 
-  const activeType = ACHIEVEMENT_TYPES.find((t) => t.key === view);
   const roleLabel = ROLE_LABELS[session!.role] ?? session!.role;
 
   return (
@@ -38,11 +36,11 @@ export function CoordinatorDashboard() {
           <div className="page-header">
             <div>
               <div className="greeting-eyebrow">{roleLabel}</div>
-              <div className="greeting-name">{activeType ? activeType.label : "Students"}</div>
+              <div className="greeting-name">{view === "achievements" ? "Pending Achievements" : "Students"}</div>
             </div>
           </div>
 
-          {activeType ? (
+          {view === "achievements" ? (
             <>
               <div className="stat-grid">
                 <div className="card stat-card">
@@ -52,13 +50,16 @@ export function CoordinatorDashboard() {
               </div>
 
               <AchievementPendingSection
-                key={activeType.key}
-                title={activeType.label}
-                idKey={activeType.idKey}
-                fields={activeType.fields}
-                api={activeType.api}
+                key="achievements"
+                title="Achievements"
+                idKey="id"
+                fields={[
+                  { name: "title", label: "Title", type: "text" },
+                  { name: "category", label: "Category", type: "text" },
+                ]}
+                api={achievementsApi}
                 token={token}
-                category={activeType.key}
+                category="achievements"
                 onCountChange={setPendingCount}
               />
             </>

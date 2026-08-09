@@ -1,47 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { ACHIEVEMENT_TYPES } from "../achievementTypes";
-import type { AchievementRecord, UploadCategory } from "../api/client";
+import { achievementsApi, STUDENT_CATEGORIES, type AchievementRecord } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { AchievementSubmitSection } from "../components/AchievementSection";
 import { Sidebar, TopBar, useDisplayName, type NavItem } from "../components/Shell";
 
 const NAV_ITEMS: NavItem[] = [
   { key: "dashboard", label: "Dashboard" },
-  ...ACHIEVEMENT_TYPES.map((t) => ({ key: t.key, label: t.label })),
+  { key: "submit", label: "Submit Achievement" },
 ];
-
-interface UnifiedRecord {
-  key: string;
-  typeKey: UploadCategory;
-  typeLabel: string;
-  title: string;
-  record: AchievementRecord;
-}
 
 function DashboardOverview({ token, onAdd }: { token: string; onAdd: () => void }) {
   const name = useDisplayName(token);
-  const [records, setRecords] = useState<UnifiedRecord[] | null>(null);
+  const [records, setRecords] = useState<AchievementRecord[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all(
-      ACHIEVEMENT_TYPES.map((t) =>
-        t.api.mine(token).then((rows) =>
-          rows.map((r) => ({
-            key: `${t.key}-${r[t.idKey]}`,
-            typeKey: t.key,
-            typeLabel: t.label,
-            title: String(r[t.fields[0].name] ?? t.label),
-            record: r,
-          }))
-        )
-      )
-    ).then((groups) => {
-      if (cancelled) return;
-      const merged = groups.flat().sort(
-        (a, b) => new Date(b.record.submitted_at).getTime() - new Date(a.record.submitted_at).getTime()
-      );
-      setRecords(merged);
+    achievementsApi.mine(token).then((rows) => {
+      if (!cancelled) setRecords(rows);
     });
     return () => {
       cancelled = true;
@@ -52,9 +27,9 @@ function DashboardOverview({ token, onAdd }: { token: string; onAdd: () => void 
     const all = records ?? [];
     return {
       total: all.length,
-      verified: all.filter((r) => r.record.status === "approved").length,
-      pending: all.filter((r) => r.record.status === "pending").length,
-      rejected: all.filter((r) => r.record.status === "rejected").length,
+      verified: all.filter((r) => r.status === "approved").length,
+      pending: all.filter((r) => r.status === "pending").length,
+      rejected: all.filter((r) => r.status === "rejected").length,
     };
   }, [records]);
 
@@ -96,17 +71,17 @@ function DashboardOverview({ token, onAdd }: { token: string; onAdd: () => void 
         {records === null && <div className="achievement-empty">Loading...</div>}
         {records?.length === 0 && <div className="achievement-empty">Nothing submitted yet.</div>}
         {records?.slice(0, 8).map((r) => (
-          <div className="achievement-row" key={r.key}>
-            <div className={`achievement-avatar avatar-${r.typeKey}`}>{r.title.charAt(0).toUpperCase()}</div>
+          <div className="achievement-row" key={r.id as number}>
+            <div className={`achievement-avatar avatar-${String(r.category).toLowerCase().replace(" ", "-")}`}>{String(r.title).charAt(0).toUpperCase()}</div>
             <div className="achievement-body">
-              <div className="achievement-title">{r.title}</div>
-              <div className="achievement-meta">{r.typeLabel}</div>
+              <div className="achievement-title">{String(r.title)}</div>
+              <div className="achievement-meta">{String(r.category)}</div>
             </div>
             <div className="achievement-right">
-              <span className={`badge badge-${r.record.status === "approved" ? "approved" : r.record.status === "rejected" ? "rejected" : "pending"}`}>
-                {r.record.status === "approved" ? "Verified" : r.record.status === "rejected" ? "Rejected" : "Pending Review"}
+              <span className={`badge badge-${r.status === "approved" ? "approved" : r.status === "rejected" ? "rejected" : "pending"}`}>
+                {r.status === "approved" ? "Verified" : r.status === "rejected" ? "Rejected" : "Pending Review"}
               </span>
-              <span className="achievement-date">{new Date(r.record.submitted_at).toLocaleDateString()}</span>
+              <span className="achievement-date">{new Date(r.submitted_at).toLocaleDateString()}</span>
             </div>
           </div>
         ))}
@@ -121,28 +96,28 @@ export function StudentDashboard() {
   const token = session!.token;
   const name = useDisplayName(token);
 
-  const activeType = ACHIEVEMENT_TYPES.find((t) => t.key === view);
-
   return (
     <div className="app-shell">
       <Sidebar items={NAV_ITEMS} active={view} onSelect={setView} />
       <div className="main">
-        <TopBar title={activeType ? activeType.label : "Dashboard"} name={name} />
+        <TopBar title={view === "dashboard" ? "Dashboard" : "Submit Achievement"} name={name} />
         {view === "dashboard" ? (
-          <DashboardOverview token={token} onAdd={() => setView("certificates")} />
-        ) : activeType ? (
+          <DashboardOverview token={token} onAdd={() => setView("submit")} />
+        ) : (
           <div className="page">
             <AchievementSubmitSection
-              key={activeType.key}
-              title={activeType.label}
-              idKey={activeType.idKey}
-              fields={activeType.fields}
-              api={activeType.api}
+              title="Achievement"
+              idKey="id"
+              fields={[
+                { name: "title", label: "Title", type: "text", required: true },
+                { name: "category", label: "Category", type: "select", options: STUDENT_CATEGORIES, required: true },
+              ]}
+              api={achievementsApi}
               token={token}
-              category={activeType.key}
+              category="achievements"
             />
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );
