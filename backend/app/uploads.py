@@ -349,7 +349,20 @@ def _recompress_pdf_images(doc: fitz.Document) -> None:
 
                 if len(data) <= size_budget or attempt == len(DIMENSION_LADDER) - 1:
                     break
-            owner_page[xref].replace_image(xref, stream=data)
+            # "text" classification means a dominant flat tone by histogram,
+            # not necessarily true near-bilevel content -- a slide
+            # background with a subtle gradient or soft shadow can pass
+            # that check while still having real per-pixel detail, which
+            # lossless PNG must preserve exactly and can end up *larger*
+            # than the original's lossy source encoding (measured: a 90KB
+            # original ballooning to 498KB). _compress_ooxml already
+            # guards this per-image; mirror that guard here rather than
+            # relying solely on the whole-file safety net in
+            # compress_and_store, which only catches a *net* regression
+            # across every image combined -- an individual image inflating
+            # can still hide inside an overall smaller file.
+            if len(data) < len(extracted["image"]):
+                owner_page[xref].replace_image(xref, stream=data)
         except Exception:
             logger.warning("Skipping recompression of PDF image xref=%s", xref, exc_info=True)
 
