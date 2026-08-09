@@ -156,6 +156,7 @@ TEXT_LOSSLESS_MAX_PIXELS = 2_000_000
 
 CONTENT_TYPES = {
     ".webp": "image/webp",
+    ".jpg": "image/jpeg",
     ".pdf": "application/pdf",
 }
 
@@ -223,6 +224,24 @@ def _compress_image(raw: bytes) -> tuple[bytes, str]:
         image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), RESIZE_FILTER)
     element_type = _classify_image(image)
 
+    # Photos (continuous-tone -- a phone-camera shot of a certificate, the
+    # dominant real case) route to JPEG instead of WebP: libjpeg-turbo's
+    # encoder measured 15-20x faster than libwebp at method=1 for
+    # equivalent quality, for only ~10-40% larger output -- on a 0.1 vCPU
+    # host where speed is the priority, that trade is worth it, and it's
+    # the same format PDF/OOXML embedded images already use here for the
+    # same reason. "graphic"/"text" deliberately stay on WebP: JPEG's
+    # block-DCT visibly rings around the flat colors and sharp edges those
+    # types are made of (see _classify_image), so the speed gain there
+    # wouldn't be worth the quality loss.
+    if element_type == "photo" and image.mode == "RGBA":
+        # JPEG has no alpha channel -- composite onto white rather than a
+        # bare mode convert, which would keep transparent pixels' raw RGB
+        # (often garbage/black) instead of blending them properly.
+        background = Image.new("RGB", image.size, (255, 255, 255))
+        background.paste(image, mask=image.split()[3])
+        image = background
+
     data = b""
     # Size-budget ladder: attempt 0 uses the profile tuned for this element
     # type; only if that's still over TARGET_MAX_FILE_SIZE do we retry with
@@ -241,13 +260,15 @@ def _compress_image(raw: bytes) -> tuple[bytes, str]:
             # for repeated glyph shapes -- shrinks this far below what lossy
             # quantization would, without the ringing that blurs small text.
             working.save(buffer, format="WEBP", lossless=True, method=WEBP_METHOD)
+        elif element_type == "photo":
+            working.save(buffer, format="JPEG", quality=QUALITY_LADDER[element_type][attempt])
         else:
             working.save(buffer, format="WEBP", quality=QUALITY_LADDER[element_type][attempt], method=WEBP_METHOD)
         data = buffer.getvalue()
 
         if len(data) <= TARGET_MAX_FILE_SIZE or attempt == len(DIMENSION_LADDER) - 1:
             break
-    return data, ".webp"
+    return data, (".jpg" if element_type == "photo" else ".webp")
 
 
 def _recompress_pdf_images(doc: fitz.Document) -> None:
@@ -421,7 +442,12 @@ def _compress_ooxml(raw: bytes, ext: str) -> tuple[bytes, str]:
 
                         out = io.BytesIO()
                         if media_format == "JPEG":
-                            working.save(out, format="JPEG", quality=QUALITY_LADDER[element_type][attempt], optimize=True)
+                            # optimize=True does a 2nd pass to compute
+                            # near-optimal Huffman tables -- measured ~2x
+                            # slower for ~13% smaller output. Skipped for
+                            # speed, matching this host's priority (same
+                            # default already used by the PDF JPEG path).
+                            working.save(out, format="JPEG", quality=QUALITY_LADDER[element_type][attempt])
                         else:
                             working.save(out, format="PNG", optimize=True)
                         out_bytes = out.getvalue()
