@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr
 
-from app.models import CertificateCategory, CertificateStatus, ParticipationRole, StudentType
+from app.models import CertificateStatus, ParticipationRole, StudentType
 
 
 class LoginRequest(BaseModel):

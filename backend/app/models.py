@@ -139,6 +139,6 @@ class Achievement(AchievementMixin, Base):
     metadata_fields: Mapped[dict | None] = mapped_column(JSON)
 
     student: Mapped[Student | None] = relationship(back_populates="achievements")
-    employee: Mapped[Employee | None] = relationship("Employee", foreign_keys=[AchievementMixin.employee_id], back_populates="achievements")
-    verifier: Mapped[Employee | None] = relationship("Employee", foreign_keys=[AchievementMixin.verified_by], back_populates="verified_achievements")
+    employee: Mapped[Employee | None] = relationship("Employee", foreign_keys="[Achievement.employee_id]", back_populates="achievements")
+    verifier: Mapped[Employee | None] = relationship("Employee", foreign_keys="[Achievement.verified_by]", back_populates="verified_achievements")
 
