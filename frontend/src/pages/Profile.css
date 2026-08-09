@@ -22,6 +22,13 @@
   position: relative;
 }
 
+.profile-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
 .profile-back {
   background: none;
   border: none;
@@ -29,7 +36,16 @@
   font-size: 14px;
   cursor: pointer;
   padding: 0;
-  margin-bottom: 24px;
+}
+
+.profile-feed-link {
+  color: var(--text-muted);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.profile-feed-link:hover {
+  color: var(--ink);
 }
 
 .profile-back:hover {

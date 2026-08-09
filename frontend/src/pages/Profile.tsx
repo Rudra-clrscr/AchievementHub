@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, achievementsApi, type AchievementRecord, type MeResponse } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import "./Profile.css";
@@ -51,9 +51,14 @@ export function Profile() {
   return (
     <div className="profile-page">
       <div className="profile-card">
-        <button className="profile-back" onClick={() => navigate(-1)} aria-label="Go back">
-          ← Back
-        </button>
+        <div className="profile-nav-row">
+          <button className="profile-back" onClick={() => navigate(-1)} aria-label="Go back">
+            ← Back
+          </button>
+          <Link to="/" className="profile-feed-link">
+            Achievement Feed →
+          </Link>
+        </div>
 
         <div className="profile-header">
           <div className="profile-avatar">{me ? initials(me.name) : "?"}</div>

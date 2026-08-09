@@ -367,6 +367,12 @@
 .sidebar-spacer {
   flex: 1;
 }
+.sidebar-feed-link {
+  text-decoration: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 15px;
+  margin-top: 4px;
+}
 .sidebar-footer {
   display: flex;
   align-items: center;
