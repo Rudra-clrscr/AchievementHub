@@ -87,7 +87,7 @@ export function PublicFeed() {
 
         </div>
         <div className="login-link">
-          <Link to="/login" className="btn-primary">Login to Submit</Link>
+          <Link to="/landing" className="btn-primary">Login to Submit</Link>
         </div>
       </section>
 
