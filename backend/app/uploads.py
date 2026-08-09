@@ -89,14 +89,25 @@ WEBP_METHOD = 1
 # it are compressed down towards this ceiling; there's no separate "floor"
 # enforcement (nothing pads a file back up to 250KB) since the quality
 # floors below already stop us well short of over-compressing that far in
-# the dominant real case (a handful of full-page scans per submission).
-TARGET_MAX_FILE_SIZE = 500 * 1024
+# the dominant real case (a single certificate/photo per submission).
+#
+# 250KB (not 500KB) specifically because MIN_PER_IMAGE_BUDGET below is what
+# actually protects multi-image document quality, not this number -- for a
+# document with 5+ embedded images the per-image floor already dominates
+# the division below regardless of what this constant is set to, so
+# lowering it doesn't push multi-image PDFs/OOXML any harder than before.
+# It does tighten single-image uploads (the dominant real case, and where
+# 250KB is realistically achievable without visible quality loss), which
+# is the actual target of lowering this.
+TARGET_MAX_FILE_SIZE = 250 * 1024
 COMPRESS_SIZE_THRESHOLD = TARGET_MAX_FILE_SIZE
 # For multi-image PDFs/OOXML files, TARGET_MAX_FILE_SIZE is split evenly
 # across embedded images. Below this per-image floor, quality wins over
 # hitting the whole-file target exactly -- a 20-page scanned PDF divided
-# into a ~25KB-per-page budget would need to crush every page to mush to
-# hit 500KB total, which damages legibility for no good reason.
+# into a ~12KB-per-page budget would need to crush every page to mush to
+# hit 250KB total, which damages legibility for no good reason. Left
+# unchanged from before -- this, not TARGET_MAX_FILE_SIZE, is what actually
+# bounds how far a multi-image document gets pushed.
 MIN_PER_IMAGE_BUDGET = 60 * 1024
 
 # Wall-clock ceiling on total time spent recompressing embedded images in a
