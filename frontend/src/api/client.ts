@@ -44,6 +44,7 @@ export interface UploadResult {
   original_size: number;
   stored_size: number;
   content_type: string;
+  thumbnail_url?: string;
 }
 
 export type UploadCategory = "certificates" | "publications" | "patents" | "internships" | "events";
@@ -147,6 +148,14 @@ export const api = {
   me: (token: string) => request<MeResponse>("/auth/me", {}, token),
 };
 
+export interface UploadResponse {
+  url: string;
+  original_size: number;
+  stored_size: number;
+  content_type: string;
+  thumbnail_url?: string;
+}
+
 export interface FeedItem {
   id: number;
   type: string;
@@ -157,6 +166,7 @@ export interface FeedItem {
   verified_at: string | null;
   file_url: string;
   is_featured: boolean;
+  thumbnail_url?: string;
 }
 
 export const feedApi = {
