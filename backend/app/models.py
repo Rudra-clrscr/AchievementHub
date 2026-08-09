@@ -93,6 +93,8 @@ class Employee(Base):
     dependents: Mapped[list["Dependent"]] = relationship(back_populates="employee")
     coordinated_students: Mapped[list["Student"]] = relationship(back_populates="coordinator")
     verified_certificates: Mapped[list["Certificate"]] = relationship(back_populates="verifier")
+    achievements: Mapped[list["Achievement"]] = relationship("Achievement", foreign_keys="[Achievement.employee_id]", back_populates="employee")
+    verified_achievements: Mapped[list["Achievement"]] = relationship("Achievement", foreign_keys="[Achievement.verified_by]", back_populates="verifier")
 
 
 class Dependent(Base):
@@ -128,6 +130,7 @@ class Student(Base):
     department: Mapped[Department | None] = relationship(back_populates="students")
     coordinator: Mapped[Employee | None] = relationship(back_populates="coordinated_students")
     certificates: Mapped[list["Certificate"]] = relationship(back_populates="student")
+    achievements: Mapped[list["Achievement"]] = relationship(back_populates="student")
 
 
 class Certificate(Base):
@@ -152,40 +155,19 @@ class Certificate(Base):
     verifier: Mapped[Employee | None] = relationship(back_populates="verified_certificates")
 
 
-class ResearchPublication(AchievementMixin, Base):
-    __tablename__ = "research_publications"
+class Achievement(AchievementMixin, Base):
+    __tablename__ = "achievements"
 
-    pub_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String(300), nullable=False)
-    venue: Mapped[str | None] = mapped_column(String(300))
-    publication_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    category: Mapped[str] = mapped_column(String(100), nullable=False)
+    sub_category: Mapped[str | None] = mapped_column(String(100))
+    
+    # Store any flexible extra fields (like patent numbers, grant amounts, etc.)
+    from sqlalchemy import JSON
+    metadata_fields: Mapped[dict | None] = mapped_column(JSON)
 
+    student: Mapped[Student | None] = relationship(back_populates="achievements")
+    employee: Mapped[Employee | None] = relationship("Employee", foreign_keys=[AchievementMixin.employee_id], back_populates="achievements")
+    verifier: Mapped[Employee | None] = relationship("Employee", foreign_keys=[AchievementMixin.verified_by], back_populates="verified_achievements")
 
-class Patent(AchievementMixin, Base):
-    __tablename__ = "patents"
-
-    patent_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    title: Mapped[str] = mapped_column(String(300), nullable=False)
-    patent_number: Mapped[str | None] = mapped_column(String(120))
-    filing_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-class Internship(AchievementMixin, Base):
-    __tablename__ = "internships"
-
-    internship_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    organization: Mapped[str] = mapped_column(String(200), nullable=False)
-    role_title: Mapped[str | None] = mapped_column(String(200))
-    start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-class EventParticipation(AchievementMixin, Base):
-    __tablename__ = "event_participations"
-
-    event_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    event_name: Mapped[str] = mapped_column(String(300), nullable=False)
-    event_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    participation_role: Mapped[ParticipationRole] = mapped_column(
-        Enum(ParticipationRole), nullable=False, default=ParticipationRole.participant
-    )

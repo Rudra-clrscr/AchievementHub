@@ -6,7 +6,7 @@ from app.uploads import compress_and_store
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
-ALLOWED_CATEGORIES = {"certificates", "publications", "patents", "internships", "events"}
+ALLOWED_CATEGORIES = {"certificates", "publications", "patents", "internships", "events", "achievements"}
 
 
 class UploadResponse(BaseModel):
