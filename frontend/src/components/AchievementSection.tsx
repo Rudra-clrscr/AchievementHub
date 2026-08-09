@@ -73,7 +73,10 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
         `Uploaded ${formatBytes(uploaded.original_size)} -> stored ${formatBytes(uploaded.stored_size)}`
       );
 
-      const payload: Record<string, unknown> = { file_url: uploaded.file_url };
+      const payload: Record<string, unknown> = { 
+        file_url: uploaded.file_url,
+        thumbnail_url: uploaded.thumbnail_url 
+      };
       for (const f of fields) {
         if (form[f.name]) payload[f.name] = form[f.name];
       }

@@ -1,0 +1,140 @@
+.detail-page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.detail-nav {
+  margin-bottom: 20px;
+}
+
+.back-link {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.back-link:hover {
+  color: var(--primary);
+}
+
+.detail-player-container {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background-color: #0f0f0f;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.document-player {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.image-player img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.detail-info-container {
+  padding: 0 12px;
+}
+
+.detail-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0 0 16px 0;
+}
+
+.detail-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color, #e5e5e5);
+}
+
+.detail-owner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.owner-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 1.25rem;
+}
+
+.owner-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.owner-name {
+  font-weight: 600;
+  color: var(--text-main);
+  font-size: 1.05rem;
+}
+
+.owner-type {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.detail-stats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--bg-surface, #f8f9fa);
+  padding: 8px 16px;
+  border-radius: 20px;
+}
+
+.detail-category {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.detail-date {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.detail-description {
+  background: var(--bg-surface, #f8f9fa);
+  padding: 16px;
+  border-radius: 12px;
+  color: var(--text-main);
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+/* Inherited avatar colors */
+.avatar-certificate { background: #3b82f6; }
+.avatar-publication { background: #10b981; }
+.avatar-patent { background: #f59e0b; }
+.avatar-internship { background: #8b5cf6; }
+.avatar-event { background: #ef4444; }
+
+.detail-loading, .detail-error {
+  text-align: center;
+  padding: 100px 20px;
+  color: var(--text-muted);
+}

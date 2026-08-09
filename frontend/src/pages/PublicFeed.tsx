@@ -105,27 +105,29 @@ export function PublicFeed() {
               <div className="no-results">No achievements found matching your criteria.</div>
             ) : (
               latestItems.map((item) => (
-                <div key={`${item.type}-${item.id}`} className="feed-card glass-panel">
-                  <div className="feed-card-header">
-                    <span className={`category-tag ${item.type}`}>{item.category}</span>
-                    <span className="date-tag">{formatDate(item.verified_at)}</span>
+                <Link to={`/achievement/${item.type}/${item.id}`} key={`${item.type}-${item.id}`} className="feed-card">
+                  <div className="feed-thumbnail">
+                    {item.thumbnail_url ? (
+                      <img src={absoluteFileUrl(item.thumbnail_url)} alt={item.title} loading="lazy" />
+                    ) : (
+                      <div className={`thumbnail-fallback fallback-${item.type}`}>
+                        <span>{item.category || item.type.toUpperCase()}</span>
+                      </div>
+                    )}
+                    <span className="date-badge">{formatDate(item.verified_at)}</span>
                   </div>
-                  <h3 className="feed-title">{item.title}</h3>
-                  <div className="feed-author">
-                    <strong>{item.owner_type === "student" ? "Student" : "Faculty"}:</strong>{" "}
-                    {item.student_name || "N/A"}
+                  
+                  <div className="feed-info">
+                    <div className={`owner-avatar avatar-${item.type}`}>
+                      {(item.student_name || "F").charAt(0).toUpperCase()}
+                    </div>
+                    <div className="feed-text">
+                      <h3 className="feed-title" title={item.title}>{item.title}</h3>
+                      <div className="feed-author">{item.student_name || "Faculty Member"}</div>
+                      <div className="feed-meta">{item.category}</div>
+                    </div>
                   </div>
-                  <div className="feed-actions">
-                    <a
-                      href={absoluteFileUrl(item.file_url)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-secondary"
-                    >
-                      View Document
-                    </a>
-                  </div>
-                </div>
+                </Link>
               ))
             )}
           </div>

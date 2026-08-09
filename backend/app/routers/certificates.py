@@ -26,6 +26,7 @@ def submit_certificate(
         issuer=payload.issuer,
         category=payload.category,
         file_url=payload.file_url,
+        thumbnail_url=payload.thumbnail_url,
         status=CertificateStatus.pending,
     )
     db.add(certificate)

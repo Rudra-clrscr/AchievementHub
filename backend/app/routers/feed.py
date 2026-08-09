@@ -16,9 +16,16 @@ def fetch_achievements(db: Session, model, type_name: str, title_attr: str, cate
     query = query.filter(model.status == CertificateStatus.approved)
     
     if owner_type:
-        query = query.filter(model.owner_type == owner_type)
+        if hasattr(model, "owner_type"):
+            query = query.filter(model.owner_type == owner_type)
+        elif owner_type != "student":
+            return []
+            
     if is_featured is not None:
-        query = query.filter(model.is_featured == is_featured)
+        if hasattr(model, "is_featured"):
+            query = query.filter(model.is_featured == is_featured)
+        elif is_featured:
+            return []
     
     if search:
         search_filter = getattr(model, title_attr).ilike(f"%{search}%")
@@ -37,12 +44,13 @@ def fetch_achievements(db: Session, model, type_name: str, title_attr: str, cate
                 id=getattr(record, f"{type_name}_id") if hasattr(record, f"{type_name}_id") else getattr(record, "cert_id", getattr(record, "pub_id", getattr(record, "patent_id", getattr(record, "internship_id", getattr(record, "event_id", 0))))),
                 type=type_name,
                 title=getattr(record, title_attr),
-                owner_type=record.owner_type.value,
+                owner_type=record.owner_type.value if hasattr(record, "owner_type") else "student",
                 student_name=student_name,
                 category=category,
                 verified_at=record.verified_at,
                 file_url=record.file_url,
-                is_featured=record.is_featured
+                is_featured=record.is_featured if hasattr(record, "is_featured") else False,
+                thumbnail_url=record.thumbnail_url if hasattr(record, "thumbnail_url") else None
             )
         )
     return feed_items
