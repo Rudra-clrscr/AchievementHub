@@ -100,8 +100,8 @@ COMPRESS_SIZE_THRESHOLD = TARGET_MAX_FILE_SIZE
 MIN_PER_IMAGE_BUDGET = 60 * 1024
 
 # Wall-clock ceiling on total time spent recompressing embedded images in a
-# single PDF/OOXML file. Per-image work is already bounded (two-attempt
-# ladder below), but nothing bounds the *count* of images -- a many-page
+# single PDF/OOXML file. Per-image work is already bounded (the ladder
+# below), but nothing bounds the *count* of images -- a many-page
 # scanned PDF/pptx can take long enough on a 0.1 vCPU host that the request
 # gateway kills the connection before a response ever comes back, which the
 # browser then reports as a CORS failure (no response at all means no CORS
@@ -113,13 +113,19 @@ RECOMPRESS_TIME_BUDGET_SECONDS = 20.0
 
 # Cheap element-type classification (see _classify_image) buckets each image
 # as "photo", "graphic" (flat-color line art/screenshots), or near-bilevel
-# "text" (plain scans), then routes it through a two-attempt quality/size
+# "text" (plain scans), then routes it through a bounded quality/size
 # ladder: attempt 0 uses a near-max-fidelity profile for that content type;
-# if the result still exceeds its size budget, attempt 1 retries once more
-# with a tighter profile and returns whatever that produces. Exactly two
-# attempts, never an open-ended search -- this runs inline in the HTTP
-# request on a 0.1 vCPU host, so bounded, predictable latency matters more
-# than shaving the last few KB off an outlier image.
+# if the result still exceeds its size budget, attempt 1 retries with a
+# tighter profile. Almost everything resolves in those first two attempts.
+# Attempt 2 exists only as a last-resort fallback for content that resists
+# compression even at attempt 1's settings (e.g. a busy diagram or a scan
+# classified "graphic"/"text", whose quality floors are deliberately kept
+# high to protect legibility) -- it drops quality/dimensions much further to
+# guarantee landing under the ceiling rather than shipping a file well over
+# target. The loop below already breaks as soon as any attempt hits budget,
+# so attempt 2's extra cost is only ever paid on the rare outlier, not on
+# every file -- this runs inline in the HTTP request on a 0.1 vCPU host, so
+# bounded, predictable latency still matters.
 #
 # Attempt 0 is deliberately high-quality rather than "aggressively small":
 # the target is a 250-500KB *ceiling*, not a size to chase downward, and
@@ -128,15 +134,15 @@ RECOMPRESS_TIME_BUDGET_SECONDS = 20.0
 # quality, and that's correct: padding it further would mean preserving
 # source-JPEG noise, upscaling, or picking a deliberately worse encoder pass,
 # none of which improve what a reviewer actually sees.
-DIMENSION_LADDER = (MAX_IMAGE_DIMENSION, 1700)
+DIMENSION_LADDER = (MAX_IMAGE_DIMENSION, 1700, 1200)
 # quality per element type, indexed by attempt number. For "text", these are
 # only the *lossy fallback* qualities -- attempt 0 first tries lossless
 # encoding (see TEXT_LOSSLESS_MAX_PIXELS) and only falls through to the
 # quality number here if the image is too large for lossless to stay cheap.
 QUALITY_LADDER = {
-    "photo": (IMAGE_QUALITY, 72),
-    "graphic": (95, 78),
-    "text": (95, 88),
+    "photo": (IMAGE_QUALITY, 72, 50),
+    "graphic": (95, 78, 55),
+    "text": (95, 88, 65),
 }
 DOMINANT_BIN_RADIUS = 12
 GRAPHIC_DOMINANT_FRACTION = 0.55
@@ -150,6 +156,7 @@ TEXT_LOSSLESS_MAX_PIXELS = 2_000_000
 
 CONTENT_TYPES = {
     ".webp": "image/webp",
+    ".jpg": "image/jpeg",
     ".pdf": "application/pdf",
 }
 
@@ -195,6 +202,13 @@ def _classify_image(image: Image.Image) -> str:
 
 def _compress_image(raw: bytes) -> tuple[bytes, str]:
     image = Image.open(io.BytesIO(raw))
+    # JPEG draft mode asks libjpeg to decode directly at a reduced scale
+    # instead of decoding full-resolution and shrinking after -- on a
+    # memory-constrained host, a single large scanned-page JPEG (e.g.
+    # 8000x6000) can peak at 100+MB as a raw decoded bitmap; decoding
+    # smaller in the first place avoids ever materializing that. No-op for
+    # non-JPEG formats (draft() is only meaningful on the JPEG plugin).
+    image.draft("RGB", (MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION))
     image.load()
 
     if image.mode not in ("RGB", "RGBA"):
@@ -211,12 +225,30 @@ def _compress_image(raw: bytes) -> tuple[bytes, str]:
         image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), RESIZE_FILTER)
     element_type = _classify_image(image)
 
+    # Photos (continuous-tone -- a phone-camera shot of a certificate, the
+    # dominant real case) route to JPEG instead of WebP: libjpeg-turbo's
+    # encoder measured 15-20x faster than libwebp at method=1 for
+    # equivalent quality, for only ~10-40% larger output -- on a 0.1 vCPU
+    # host where speed is the priority, that trade is worth it, and it's
+    # the same format PDF/OOXML embedded images already use here for the
+    # same reason. "graphic"/"text" deliberately stay on WebP: JPEG's
+    # block-DCT visibly rings around the flat colors and sharp edges those
+    # types are made of (see _classify_image), so the speed gain there
+    # wouldn't be worth the quality loss.
+    if element_type == "photo" and image.mode == "RGBA":
+        # JPEG has no alpha channel -- composite onto white rather than a
+        # bare mode convert, which would keep transparent pixels' raw RGB
+        # (often garbage/black) instead of blending them properly.
+        background = Image.new("RGB", image.size, (255, 255, 255))
+        background.paste(image, mask=image.split()[3])
+        image = background
+
     data = b""
-    # Two-attempt size-budget ladder: attempt 0 uses the profile tuned for
-    # this element type; only if that's still over TARGET_MAX_FILE_SIZE do
-    # we retry once more, tighter. See the DIMENSION_LADDER/QUALITY_LADDER
-    # comment above for why this stops at two attempts rather than
-    # searching for an exact fit.
+    # Size-budget ladder: attempt 0 uses the profile tuned for this element
+    # type; only if that's still over TARGET_MAX_FILE_SIZE do we retry with
+    # a tighter profile, up to the last-resort attempt. See the
+    # DIMENSION_LADDER/QUALITY_LADDER comment above for why this stops
+    # there rather than searching for an exact fit.
     for attempt, dimension_cap in enumerate(DIMENSION_LADDER):
         working = image
         if working.width > dimension_cap or working.height > dimension_cap:
@@ -229,13 +261,15 @@ def _compress_image(raw: bytes) -> tuple[bytes, str]:
             # for repeated glyph shapes -- shrinks this far below what lossy
             # quantization would, without the ringing that blurs small text.
             working.save(buffer, format="WEBP", lossless=True, method=WEBP_METHOD)
+        elif element_type == "photo":
+            working.save(buffer, format="JPEG", quality=QUALITY_LADDER[element_type][attempt])
         else:
             working.save(buffer, format="WEBP", quality=QUALITY_LADDER[element_type][attempt], method=WEBP_METHOD)
         data = buffer.getvalue()
 
         if len(data) <= TARGET_MAX_FILE_SIZE or attempt == len(DIMENSION_LADDER) - 1:
             break
-    return data, ".webp"
+    return data, (".jpg" if element_type == "photo" else ".webp")
 
 
 def _recompress_pdf_images(doc: fitz.Document) -> None:
@@ -252,12 +286,23 @@ def _recompress_pdf_images(doc: fitz.Document) -> None:
     MIN_PER_IMAGE_BUDGET -- see its definition for why)."""
     seen_xrefs: set[int] = set()
     xrefs: list[int] = []
+    # replace_image() (see below) has to be called on a page that actually
+    # references the target xref -- it internally does page.insert_image()
+    # + xref_copy() + blanks the resulting phantom content stream on that
+    # *same* page. Calling it on an unrelated page still updates the image
+    # correctly, but leaves an orphaned duplicate of the new image sitting
+    # in that unrelated page's /Resources (referenced there, so never
+    # garbage-collected) -- pure dead weight. Tracking each xref's real
+    # owner page here avoids that; a stale `page` loop variable was
+    # silently duplicating every recompressed image before this.
+    owner_page: dict[int, fitz.Page] = {}
     for page in doc:
         for image_info in page.get_images(full=True):
             xref = image_info[0]
             if xref not in seen_xrefs:
                 seen_xrefs.add(xref)
                 xrefs.append(xref)
+                owner_page[xref] = page
 
     size_budget = max(TARGET_MAX_FILE_SIZE // max(len(xrefs), 1), MIN_PER_IMAGE_BUDGET)
 
@@ -271,6 +316,10 @@ def _recompress_pdf_images(doc: fitz.Document) -> None:
             if len(extracted["image"]) <= EMBEDDED_IMAGE_SKIP_THRESHOLD:
                 continue
             image = Image.open(io.BytesIO(extracted["image"]))
+            # See _compress_image: decode at reduced scale directly rather
+            # than full-resolution then shrinking, to bound peak memory on
+            # this host. No-op for non-JPEG.
+            image.draft("RGB", (MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION))
             image.load()
             if image.mode not in ("RGB", "L"):
                 image = image.convert("RGB")
@@ -301,15 +350,76 @@ def _recompress_pdf_images(doc: fitz.Document) -> None:
 
                 if len(data) <= size_budget or attempt == len(DIMENSION_LADDER) - 1:
                     break
-            page.replace_image(xref, stream=data)
+            # "text" classification means a dominant flat tone by histogram,
+            # not necessarily true near-bilevel content -- a slide
+            # background with a subtle gradient or soft shadow can pass
+            # that check while still having real per-pixel detail, which
+            # lossless PNG must preserve exactly and can end up *larger*
+            # than the original's lossy source encoding (measured: a 90KB
+            # original ballooning to 498KB). _compress_ooxml already
+            # guards this per-image; mirror that guard here rather than
+            # relying solely on the whole-file safety net in
+            # compress_and_store, which only catches a *net* regression
+            # across every image combined -- an individual image inflating
+            # can still hide inside an overall smaller file.
+            if len(data) < len(extracted["image"]):
+                owner_page[xref].replace_image(xref, stream=data)
         except Exception:
             logger.warning("Skipping recompression of PDF image xref=%s", xref, exc_info=True)
+
+    # replace_image() (PyMuPDF's own implementation) always inserts the
+    # replacement as a fresh XObject, copies it over the target xref, then
+    # blanks the throwaway *content-stream* instruction it created -- but
+    # the throwaway object's entry in the page's /Resources dictionary
+    # survives that blanking, so it's still "referenced" and garbage=4
+    # below won't drop it. clean_contents() recomputes each page's actual
+    # resource usage and prunes exactly those orphans. Without this, every
+    # recompressed image was silently duplicated in the output (its old
+    # size *and* new size both present) -- on files where recompression
+    # didn't save much more than the duplicate cost, this made the
+    # "compressed" file larger than the original (caught by the size
+    # safety net in compress_and_store, but at the cost of the compression
+    # this function exists to do). Measured on a real 51-image PDF: fixed
+    # a 2.51MB input from regressing to 2.97MB, landing at 2.06MB instead.
+    for page in doc:
+        page.clean_contents(sanitize=True)
+
+
+def _strip_editor_roundtrip_data(doc: fitz.Document) -> None:
+    """Removes per-page PieceInfo/Thumb entries. Design tools (seen from
+    Adobe Illustrator exports in practice) use PieceInfo to embed the
+    *entire native source document* inside the PDF, chunked across many
+    AIPDFPrivateData objects, purely so the same app can later reopen the
+    PDF with full native editability; Thumb is a cached page-thumbnail
+    image. Neither is ever read by a PDF viewer or printer -- a viewer
+    renders the page's actual content stream, not this side data -- so
+    dropping it is lossless for anyone just viewing the document. Verified
+    render-identical (byte-for-byte matching rendered pixels) on a real
+    Illustrator-exported file where this alone cut size by over 90%
+    (2.43MB -> 159KB), with no image or font content touched.
+    garbage=4 in the final tobytes() call reclaims the now-unreferenced
+    backing objects once these keys no longer point at them.
+
+    NOTE: doc.subset_fonts() was tried here too and looked promising in
+    isolation (60%+ reduction on a synthetic test), but it silently
+    corrupted body text on this same real-world file -- Type0/CID-keyed
+    fonts rendered as stray marks instead of glyphs, with no exception
+    raised to catch. Deliberately not used for that reason."""
+    for page in doc:
+        xref = page.xref
+        for key in ("PieceInfo", "Thumb"):
+            if doc.xref_get_key(xref, key)[0] != "null":
+                doc.xref_set_key(xref, key, "null")
 
 
 def _compress_pdf(raw: bytes) -> tuple[bytes, str]:
     doc = fitz.open(stream=raw, filetype="pdf")
     try:
         _recompress_pdf_images(doc)
+        try:
+            _strip_editor_roundtrip_data(doc)
+        except Exception:
+            logger.warning("Stripping editor round-trip data failed, continuing without it", exc_info=True)
         return doc.tobytes(garbage=4, deflate=True, deflate_images=True, deflate_fonts=True), ".pdf"
     finally:
         doc.close()
@@ -348,6 +458,10 @@ def _compress_ooxml(raw: bytes, ext: str) -> tuple[bytes, str]:
             elif media_format and _is_eligible(item):
                 try:
                     image = Image.open(io.BytesIO(content))
+                    # See _compress_image: decode at reduced scale directly
+                    # rather than full-resolution then shrinking, to bound
+                    # peak memory on this host. No-op for non-JPEG.
+                    image.draft("RGB", (MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION))
                     image.load()
                     if media_format == "JPEG" and image.mode not in ("RGB", "L"):
                         image = image.convert("RGB")
@@ -370,7 +484,12 @@ def _compress_ooxml(raw: bytes, ext: str) -> tuple[bytes, str]:
 
                         out = io.BytesIO()
                         if media_format == "JPEG":
-                            working.save(out, format="JPEG", quality=QUALITY_LADDER[element_type][attempt], optimize=True)
+                            # optimize=True does a 2nd pass to compute
+                            # near-optimal Huffman tables -- measured ~2x
+                            # slower for ~13% smaller output. Skipped for
+                            # speed, matching this host's priority (same
+                            # default already used by the PDF JPEG path).
+                            working.save(out, format="JPEG", quality=QUALITY_LADDER[element_type][attempt])
                         else:
                             working.save(out, format="PNG", optimize=True)
                         out_bytes = out.getvalue()
