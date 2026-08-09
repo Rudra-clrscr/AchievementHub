@@ -98,10 +98,10 @@ export function makeAchievementApi(basePath: string) {
       request<AchievementRecord>(basePath, { method: "POST", body: JSON.stringify(payload) }, token),
     mine: (token: string) => request<AchievementRecord[]>(`${basePath}/mine`, {}, token),
     pending: (token: string) => request<AchievementRecord[]>(`${basePath}/pending`, {}, token),
-    verify: (token: string, id: number, approve: boolean) =>
+    verify: (token: string, id: number, approve: boolean, remarks?: string) =>
       request<AchievementRecord>(
         `${basePath}/${id}/verify`,
-        { method: "PATCH", body: JSON.stringify({ approve }) },
+        { method: "PATCH", body: JSON.stringify({ approve, remarks }) },
         token
       ),
   };
