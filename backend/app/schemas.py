@@ -49,6 +49,7 @@ class AchievementCreate(BaseModel):
 
 class AchievementVerify(BaseModel):
     approve: bool
+    remarks: str | None = None
 
 
 class AchievementOut(BaseModel):
