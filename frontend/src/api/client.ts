@@ -47,7 +47,7 @@ export interface UploadResult {
   thumbnail_url?: string;
 }
 
-export type UploadCategory = "certificates" | "publications" | "patents" | "internships" | "events";
+export type UploadCategory = "certificates" | "publications" | "patents" | "internships" | "events" | "achievements";
 
 export async function uploadFile(token: string, category: UploadCategory, file: File): Promise<UploadResult> {
   const body = new FormData();
@@ -85,11 +85,22 @@ export function makeAchievementApi(basePath: string) {
   };
 }
 
-export const certificatesApi = makeAchievementApi("/certificates");
-export const publicationsApi = makeAchievementApi("/publications");
-export const patentsApi = makeAchievementApi("/patents");
-export const internshipsApi = makeAchievementApi("/internships");
-export const eventsApi = makeAchievementApi("/events");
+export const achievementsApi = makeAchievementApi("/achievements");
+
+export const STUDENT_CATEGORIES = [
+  "Academic Achievements", "Research & Publications", "Intellectual Property",
+  "Internship & Industrial Training", "Certifications", "Technical Competitions",
+  "Project Achievements", "Event Participation", "Leadership & Club Activities",
+  "Sports", "Cultural Activities", "Placement & Career", "Community Service", "Awards & Recognition"
+];
+
+export const FACULTY_CATEGORIES = [
+  "Academic Achievements", "Research Publications", "Intellectual Property",
+  "Grants & Funding", "Teaching & Learning", "Faculty Development",
+  "Professional Memberships", "Administrative Responsibilities", "Student Mentorship",
+  "Consultancy & Industry Collaboration", "Invited Talks", "Awards & Recognition",
+  "Editorial & Review Activities", "Event Organization"
+];
 
 export interface MeResponse {
   id: number;

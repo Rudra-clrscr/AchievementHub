@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { feedApi, type FeedItem, absoluteFileUrl } from "../api/client";
+import { feedApi, type FeedItem, absoluteFileUrl, STUDENT_CATEGORIES, FACULTY_CATEGORIES } from "../api/client";
 import "./PublicFeed.css";
 
 export function PublicFeed() {
@@ -77,17 +77,14 @@ export function PublicFeed() {
 
           <select value={category} onChange={(e) => setCategory(e.target.value)}>
             <option value="">All Categories</option>
-            <optgroup label="Academic & Research">
-              <option value="publication">Publications</option>
-              <option value="patent">Patents</option>
-              <option value="certificate">Certificates</option>
+            <optgroup label="Student Categories">
+              {STUDENT_CATEGORIES.map(c => <option key={`student-${c}`} value={c}>{c}</option>)}
             </optgroup>
-            <optgroup label="Professional & Extracurricular">
-              <option value="internship">Internships</option>
-              <option value="event">Events & Hackathons</option>
-              <option value="sports">Sports</option>
+            <optgroup label="Faculty Categories">
+              {FACULTY_CATEGORIES.map(c => <option key={`faculty-${c}`} value={c}>{c}</option>)}
             </optgroup>
           </select>
+
         </div>
         <div className="login-link">
           <Link to="/login" className="btn-primary">Login to Submit</Link>

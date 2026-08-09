@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, certificates, departments, events, internships, patents, publications, students, uploads
+from app.routers import auth, departments, achievements, students, uploads
 from app.routers import feed
 
 app = FastAPI(title="AchievementHub API")
@@ -17,11 +17,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(departments.router)
-app.include_router(certificates.router)
-app.include_router(publications.router)
-app.include_router(patents.router)
-app.include_router(internships.router)
-app.include_router(events.router)
+app.include_router(achievements.router)
 app.include_router(students.router)
 app.include_router(uploads.router)
 app.include_router(feed.router)
