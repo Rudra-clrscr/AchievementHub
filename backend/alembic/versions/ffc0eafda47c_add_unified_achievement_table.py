@@ -55,16 +55,14 @@ def upgrade() -> None:
         conn.execute(
             sa.text("""
             INSERT INTO achievements (title, category, sub_category, metadata_fields, owner_type, student_id, employee_id, file_url, status, submitted_at, verified_by, verified_at, is_featured, thumbnail_url)
-            VALUES (:title, :category, :sub_category, :metadata_fields, :owner_type, :student_id, :employee_id, :file_url, :status, :submitted_at, :verified_by, :verified_at, :is_featured, :thumbnail_url)
+            VALUES (:title, :category, :sub_category, :metadata_fields, 'student', :student_id, NULL, :file_url, :status, :submitted_at, :verified_by, :verified_at, :is_featured, :thumbnail_url)
             """),
             {
                 "title": row['title'],
-                "category": row['category'].value if hasattr(row['category'], 'value') else row['category'],
-                "sub_category": None,
+                "category": "Certifications",
+                "sub_category": row['category'].value if hasattr(row['category'], 'value') else row['category'],
                 "metadata_fields": json.dumps(meta),
-                "owner_type": row['owner_type'].value if hasattr(row['owner_type'], 'value') else row['owner_type'],
                 "student_id": row['student_id'],
-                "employee_id": row['employee_id'],
                 "file_url": row['file_url'],
                 "status": row['status'].value if hasattr(row['status'], 'value') else row['status'],
                 "submitted_at": row['submitted_at'],
