@@ -111,6 +111,16 @@ export function StudentDashboard() {
               fields={[
                 { name: "title", label: "Title", type: "text", required: true },
                 { name: "category", label: "Category", type: "select", options: STUDENT_CATEGORIES, required: true },
+                { name: "description", label: "Description", type: "textarea" },
+                { name: "level", label: "Achievement Level", type: "select", options: ["", "College", "University", "State", "National", "International"] },
+                { name: "date", label: "Date of Achievement", type: "date", required: true },
+                { name: "organization", label: "Organization/Institution", type: "text" },
+                { name: "event_name", label: "Event/Conference Name", type: "text" },
+                { name: "team_or_individual", label: "Team or Individual", type: "select", options: ["", "Individual", "Team"] },
+                { name: "start_date", label: "Start Date (if applicable)", type: "date" },
+                { name: "end_date", label: "End Date (if applicable)", type: "date" },
+                { name: "academic_year", label: "Academic Year (e.g. 2023-2024)", type: "text" },
+                { name: "semester", label: "Semester", type: "select", options: ["", "1", "2", "3", "4", "5", "6", "7", "8"] },
               ]}
               api={achievementsApi}
               token={token}

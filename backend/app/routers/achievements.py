@@ -101,6 +101,12 @@ def verify_achievement(
     record.status = CertificateStatus.approved if payload.approve else CertificateStatus.rejected
     record.verified_by = verifier.emp_id
     record.verified_at = datetime.now(timezone.utc)
+    
+    if payload.remarks:
+        current_meta = record.metadata_fields or {}
+        current_meta["remarks"] = payload.remarks
+        record.metadata_fields = current_meta
+        
     db.commit()
     db.refresh(record)
     return record

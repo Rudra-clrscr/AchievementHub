@@ -10,7 +10,7 @@ import {
 export interface FieldConfig {
   name: string;
   label: string;
-  type: "text" | "date" | "select";
+  type: "text" | "date" | "select" | "textarea";
   options?: string[];
   required?: boolean;
 }
@@ -19,7 +19,7 @@ export interface AchievementApi {
   submit: (token: string, payload: Record<string, unknown>) => Promise<AchievementRecord>;
   mine: (token: string) => Promise<AchievementRecord[]>;
   pending: (token: string) => Promise<AchievementRecord[]>;
-  verify: (token: string, id: number, approve: boolean) => Promise<AchievementRecord>;
+  verify: (token: string, id: number, approve: boolean, remarks?: string) => Promise<AchievementRecord>;
 }
 
 interface StudentProps {
@@ -74,11 +74,18 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
       );
 
       const payload: Record<string, unknown> = { 
+        title: form.title,
+        category: form.category,
         file_url: uploaded.file_url,
-        thumbnail_url: uploaded.thumbnail_url 
+        thumbnail_url: uploaded.thumbnail_url,
+        metadata_fields: {}
       };
+      
+      const meta = payload.metadata_fields as Record<string, string>;
       for (const f of fields) {
-        if (form[f.name]) payload[f.name] = form[f.name];
+        if (f.name !== "title" && f.name !== "category" && form[f.name]) {
+          meta[f.name] = form[f.name];
+        }
       }
       setStage("saving");
       await api.submit(token, payload);
@@ -97,9 +104,6 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
     saving: "Saving...",
   };
 
-  const titleField = fields[0];
-  const metaFields = fields.slice(1);
-
   return (
     <>
       <form className="card section-card" onSubmit={handleSubmit}>
@@ -111,7 +115,7 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
         <div className="form-section-label">Details</div>
         <div className="form-grid">
           {fields.map((f) => (
-            <div className={`field${f.type === "select" ? "" : ""}`} key={f.name}>
+            <div className="field" key={f.name}>
               <label>{f.label}</label>
               {f.type === "select" ? (
                 <select value={form[f.name]} onChange={(e) => setForm({ ...form, [f.name]: e.target.value })}>
@@ -121,6 +125,13 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
                     </option>
                   ))}
                 </select>
+              ) : f.type === "textarea" ? (
+                <textarea
+                  value={form[f.name]}
+                  onChange={(e) => setForm({ ...form, [f.name]: e.target.value })}
+                  required={f.required}
+                  rows={3}
+                />
               ) : (
                 <input
                   type={f.type}
@@ -164,15 +175,17 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
         {records.map((r) => (
           <div className="achievement-row" key={String(r[idKey])}>
             <div className={`achievement-avatar avatar-${category}`}>
-              {String(r[titleField.name] ?? "?").charAt(0).toUpperCase()}
+              {String(r.title ?? "?").charAt(0).toUpperCase()}
             </div>
             <div className="achievement-body">
-              <div className="achievement-title">{String(r[titleField.name] ?? "")}</div>
+              <div className="achievement-title">{String(r.title ?? "")}</div>
               <div className="achievement-meta">
-                {metaFields
-                  .map((f) => r[f.name])
-                  .filter(Boolean)
-                  .join(" · ") || title}
+                {String(r.category ?? "")}
+                {(r.metadata_fields as any)?.remarks && (
+                  <div style={{ color: "#666", marginTop: 4, fontSize: "0.85em", fontStyle: "italic" }}>
+                    Remarks: {(r.metadata_fields as any).remarks}
+                  </div>
+                )}
               </div>
             </div>
             <div className="achievement-right">
@@ -199,6 +212,7 @@ interface CoordinatorProps {
 export function AchievementPendingSection({ title, idKey, fields, api, token, category, onCountChange }: CoordinatorProps) {
   const [records, setRecords] = useState<AchievementRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [remarks, setRemarks] = useState<Record<number, string>>({});
 
   const refresh = () => {
     api
@@ -215,15 +229,17 @@ export function AchievementPendingSection({ title, idKey, fields, api, token, ca
   const decide = async (id: number, approve: boolean) => {
     setError(null);
     try {
-      await api.verify(token, id, approve);
+      await api.verify(token, id, approve, remarks[id]);
+      setRemarks((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
       refresh();
     } catch {
       setError("Failed to update record");
     }
   };
-
-  const titleField = fields[0];
-  const metaFields = fields.slice(1);
 
   return (
     <div className="card section-card">
@@ -232,37 +248,63 @@ export function AchievementPendingSection({ title, idKey, fields, api, token, ca
       </div>
       {error && <p className="field-error">{error}</p>}
       {records.length === 0 && <div className="achievement-empty">Nothing pending.</div>}
-      {records.map((r) => (
-        <div className="queue-row" key={String(r[idKey])}>
-          <div className={`achievement-avatar avatar-${category}`}>
-            {String(r[titleField.name] ?? "?").charAt(0).toUpperCase()}
-          </div>
-          <div className="achievement-body">
-            <div className="achievement-title">
-              Student #{String(r.student_id ?? "")} — {String(r[titleField.name] ?? "")}
+      {records.map((r) => {
+        const id = Number(r[idKey]);
+        const meta = (r.metadata_fields as Record<string, string>) || {};
+        const metaEntries = Object.entries(meta).filter(([k]) => k !== "remarks");
+        
+        return (
+          <div className="queue-row" key={id} style={{ display: "block" }}>
+            <div style={{ display: "flex", gap: "1rem" }}>
+              <div className={`achievement-avatar avatar-${category}`}>
+                {String(r.title ?? "?").charAt(0).toUpperCase()}
+              </div>
+              <div className="achievement-body" style={{ flex: 1 }}>
+                <div className="achievement-title">
+                  Student #{String(r.student_id ?? "")} — {String(r.title ?? "")}
+                </div>
+                <div className="achievement-meta">
+                  Category: {String(r.category ?? "")}
+                  <span style={{ margin: "0 8px" }}>·</span>
+                  {new Date(r.submitted_at).toLocaleDateString()}
+                </div>
+                
+                {metaEntries.length > 0 && (
+                  <div style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "#555", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+                    {metaEntries.map(([k, v]) => (
+                      <div key={k}>
+                        <strong>{k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}:</strong> {v}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <a className="queue-link" href={absoluteFileUrl(r.file_url)} target="_blank" rel="noreferrer">
+                  View Proof
+                </a>
+              </div>
             </div>
-            <div className="achievement-meta">
-              {metaFields
-                .map((f) => r[f.name])
-                .filter(Boolean)
-                .join(" · ")}
-              {" · "}
-              {new Date(r.submitted_at).toLocaleDateString()}
+            <div style={{ marginTop: "1rem", display: "flex", gap: "1rem", alignItems: "center" }}>
+              <input 
+                type="text" 
+                placeholder="Add remarks (optional)..." 
+                style={{ flex: 1, padding: "0.4rem 0.6rem", borderRadius: "4px", border: "1px solid #ccc" }}
+                value={remarks[id] || ""}
+                onChange={(e) => setRemarks({ ...remarks, [id]: e.target.value })}
+              />
+              <div className="queue-actions">
+                <button className="btn btn-outline btn-sm" onClick={() => decide(id, false)}>
+                  Decline
+                </button>
+                <button className="btn btn-approve btn-sm" onClick={() => decide(id, true)}>
+                  Approve
+                </button>
+              </div>
             </div>
           </div>
-          <a className="queue-link" href={absoluteFileUrl(r.file_url)} target="_blank" rel="noreferrer">
-            View
-          </a>
-          <div className="queue-actions">
-            <button className="btn btn-outline btn-sm" onClick={() => decide(Number(r[idKey]), false)}>
-              Decline
-            </button>
-            <button className="btn btn-approve btn-sm" onClick={() => decide(Number(r[idKey]), true)}>
-              Approve
-            </button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
