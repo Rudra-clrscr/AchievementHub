@@ -209,7 +209,7 @@ interface CoordinatorProps {
   onCountChange?: (count: number) => void;
 }
 
-export function AchievementPendingSection({ title, idKey, fields, api, token, category, onCountChange }: CoordinatorProps) {
+export function AchievementPendingSection({ title, idKey, api, token, category, onCountChange }: CoordinatorProps) {
   const [records, setRecords] = useState<AchievementRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [remarks, setRemarks] = useState<Record<number, string>>({});

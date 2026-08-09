@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { useAuth } from "../auth/AuthContext";
 
 export interface NavItem {
   key: string;
@@ -59,7 +59,7 @@ export function Sidebar({
 }
 
 export function TopBar({ title, name, extra }: { title: string; name: string; extra?: React.ReactNode }) {
-  const { logout } = useAuth();
+  const navigate = useNavigate();
   return (
     <header className="topbar">
       <div className="topbar-title">{title}</div>
@@ -72,7 +72,7 @@ export function TopBar({ title, name, extra }: { title: string; name: string; ex
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
         </button>
-        <button className="avatar" onClick={logout} title="Log out">
+        <button className="avatar" onClick={() => navigate("/profile")} title="View profile">
           {name ? initials(name) : "?"}
         </button>
       </div>

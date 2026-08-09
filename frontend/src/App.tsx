@@ -8,6 +8,7 @@ import { StudentDashboard } from "./pages/StudentDashboard";
 import { CoordinatorDashboard } from "./pages/CoordinatorDashboard";
 import { PublicFeed } from "./pages/PublicFeed";
 import { AchievementDetail } from "./pages/AchievementDetail";
+import { Profile } from "./pages/Profile";
 
 function RequireRole({ roles, children }: { roles: string[]; children: React.ReactNode }) {
   const { session } = useAuth();
@@ -16,11 +17,25 @@ function RequireRole({ roles, children }: { roles: string[]; children: React.Rea
   return <>{children}</>;
 }
 
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { session } = useAuth();
+  if (!session) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<PublicFeed />} />
       <Route path="/achievement/:type/:id" element={<AchievementDetail />} />
+      <Route
+        path="/profile"
+        element={
+          <RequireAuth>
+            <Profile />
+          </RequireAuth>
+        }
+      />
       <Route path="/landing" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
