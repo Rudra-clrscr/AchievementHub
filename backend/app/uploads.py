@@ -285,12 +285,23 @@ def _recompress_pdf_images(doc: fitz.Document) -> None:
     MIN_PER_IMAGE_BUDGET -- see its definition for why)."""
     seen_xrefs: set[int] = set()
     xrefs: list[int] = []
+    # replace_image() (see below) has to be called on a page that actually
+    # references the target xref -- it internally does page.insert_image()
+    # + xref_copy() + blanks the resulting phantom content stream on that
+    # *same* page. Calling it on an unrelated page still updates the image
+    # correctly, but leaves an orphaned duplicate of the new image sitting
+    # in that unrelated page's /Resources (referenced there, so never
+    # garbage-collected) -- pure dead weight. Tracking each xref's real
+    # owner page here avoids that; a stale `page` loop variable was
+    # silently duplicating every recompressed image before this.
+    owner_page: dict[int, fitz.Page] = {}
     for page in doc:
         for image_info in page.get_images(full=True):
             xref = image_info[0]
             if xref not in seen_xrefs:
                 seen_xrefs.add(xref)
                 xrefs.append(xref)
+                owner_page[xref] = page
 
     size_budget = max(TARGET_MAX_FILE_SIZE // max(len(xrefs), 1), MIN_PER_IMAGE_BUDGET)
 
@@ -338,9 +349,26 @@ def _recompress_pdf_images(doc: fitz.Document) -> None:
 
                 if len(data) <= size_budget or attempt == len(DIMENSION_LADDER) - 1:
                     break
-            page.replace_image(xref, stream=data)
+            owner_page[xref].replace_image(xref, stream=data)
         except Exception:
             logger.warning("Skipping recompression of PDF image xref=%s", xref, exc_info=True)
+
+    # replace_image() (PyMuPDF's own implementation) always inserts the
+    # replacement as a fresh XObject, copies it over the target xref, then
+    # blanks the throwaway *content-stream* instruction it created -- but
+    # the throwaway object's entry in the page's /Resources dictionary
+    # survives that blanking, so it's still "referenced" and garbage=4
+    # below won't drop it. clean_contents() recomputes each page's actual
+    # resource usage and prunes exactly those orphans. Without this, every
+    # recompressed image was silently duplicated in the output (its old
+    # size *and* new size both present) -- on files where recompression
+    # didn't save much more than the duplicate cost, this made the
+    # "compressed" file larger than the original (caught by the size
+    # safety net in compress_and_store, but at the cost of the compression
+    # this function exists to do). Measured on a real 51-image PDF: fixed
+    # a 2.51MB input from regressing to 2.97MB, landing at 2.06MB instead.
+    for page in doc:
+        page.clean_contents(sanitize=True)
 
 
 def _strip_editor_roundtrip_data(doc: fitz.Document) -> None:
