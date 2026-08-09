@@ -43,6 +43,7 @@ class CertificateCreate(BaseModel):
     issuer: str | None = None
     category: CertificateCategory
     file_url: str
+    thumbnail_url: str | None = None
 
 
 class CertificateVerify(BaseModel):
@@ -60,6 +61,7 @@ class CertificateOut(BaseModel):
     submitted_at: datetime
     verified_by: int | None
     verified_at: datetime | None
+    thumbnail_url: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -69,6 +71,7 @@ class PublicationCreate(BaseModel):
     venue: str | None = None
     publication_date: datetime | None = None
     file_url: str
+    thumbnail_url: str | None = None
 
 
 class PublicationOut(BaseModel):
@@ -82,6 +85,7 @@ class PublicationOut(BaseModel):
     submitted_at: datetime
     verified_by: int | None
     verified_at: datetime | None
+    thumbnail_url: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -91,6 +95,7 @@ class PatentCreate(BaseModel):
     patent_number: str | None = None
     filing_date: datetime | None = None
     file_url: str
+    thumbnail_url: str | None = None
 
 
 class PatentOut(BaseModel):
@@ -104,6 +109,7 @@ class PatentOut(BaseModel):
     submitted_at: datetime
     verified_by: int | None
     verified_at: datetime | None
+    thumbnail_url: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -114,6 +120,7 @@ class InternshipCreate(BaseModel):
     start_date: datetime | None = None
     end_date: datetime | None = None
     file_url: str
+    thumbnail_url: str | None = None
 
 
 class InternshipOut(BaseModel):
@@ -128,6 +135,7 @@ class InternshipOut(BaseModel):
     submitted_at: datetime
     verified_by: int | None
     verified_at: datetime | None
+    thumbnail_url: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -137,6 +145,7 @@ class EventParticipationCreate(BaseModel):
     event_date: datetime | None = None
     participation_role: ParticipationRole = ParticipationRole.participant
     file_url: str
+    thumbnail_url: str | None = None
 
 
 class EventParticipationOut(BaseModel):
@@ -150,6 +159,7 @@ class EventParticipationOut(BaseModel):
     submitted_at: datetime
     verified_by: int | None
     verified_at: datetime | None
+    thumbnail_url: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -173,6 +183,7 @@ class FeedItem(BaseModel):
     verified_at: datetime | None = None
     file_url: str
     is_featured: bool = False
+    thumbnail_url: str | None = None
 
     model_config = {"from_attributes": True}
 class CoordinatorOut(BaseModel):

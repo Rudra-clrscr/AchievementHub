@@ -155,11 +155,12 @@ CONTENT_TYPES = {
 
 
 class CompressedUpload:
-    def __init__(self, url: str, original_size: int, stored_size: int, content_type: str):
+    def __init__(self, url: str, original_size: int, stored_size: int, content_type: str, thumbnail_url: str | None = None):
         self.url = url
         self.original_size = original_size
         self.stored_size = stored_size
         self.content_type = content_type
+        self.thumbnail_url = thumbnail_url
 
 
 def _classify_image(image: Image.Image) -> str:
@@ -384,6 +385,40 @@ def _compress_ooxml(raw: bytes, ext: str) -> tuple[bytes, str]:
             dst.writestr(item, content)
     return buffer.getvalue(), ext
 
+def _generate_pdf_thumbnail(raw: bytes) -> tuple[bytes, str]:
+    try:
+        doc = fitz.open(stream=raw, filetype="pdf")
+        if len(doc) == 0:
+            return b"", ""
+        page = doc[0]
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        if img.width > 800 or img.height > 800:
+            img.thumbnail((800, 800), RESIZE_FILTER)
+        buffer = io.BytesIO()
+        img.save(buffer, format="WEBP", quality=80)
+        return buffer.getvalue(), ".webp"
+    except Exception:
+        logger.warning("Failed to generate PDF thumbnail", exc_info=True)
+        return b"", ""
+    finally:
+        if 'doc' in locals():
+            doc.close()
+
+def _generate_image_thumbnail(raw: bytes) -> tuple[bytes, str]:
+    try:
+        img = Image.open(io.BytesIO(raw))
+        if img.mode not in ("RGB", "RGBA"):
+            img = img.convert("RGBA" if "A" in img.mode else "RGB")
+        if img.width > 800 or img.height > 800:
+            img.thumbnail((800, 800), RESIZE_FILTER)
+        buffer = io.BytesIO()
+        img.save(buffer, format="WEBP", quality=80)
+        return buffer.getvalue(), ".webp"
+    except Exception:
+        logger.warning("Failed to generate Image thumbnail", exc_info=True)
+        return b"", ""
+
 
 def _upload_to_supabase(data: bytes, path: str, content_type: str) -> str:
     upload_url = f"{settings.supabase_url}/storage/v1/object/{settings.supabase_storage_bucket}/{path}"
@@ -438,12 +473,26 @@ def compress_and_store(upload: UploadFile, subfolder: str) -> CompressedUpload:
         data, ext = raw, Path(upload.filename or "").suffix.lower()
 
     content_type = CONTENT_TYPES.get(ext, original_content_type)
-    path = f"{subfolder}/{uuid.uuid4().hex}{ext}"
+    file_id = uuid.uuid4().hex
+    path = f"{subfolder}/{file_id}{ext}"
     url = _upload_to_supabase(data, path, content_type)
+
+    thumbnail_url = None
+    thumb_data, thumb_ext = b"", ""
+    if original_size > 0:
+        if ext in IMAGE_EXTENSIONS:
+            thumb_data, thumb_ext = _generate_image_thumbnail(raw)
+        elif ext == PDF_EXTENSION:
+            thumb_data, thumb_ext = _generate_pdf_thumbnail(raw)
+            
+    if thumb_data:
+        thumb_path = f"{subfolder}/thumbs/{file_id}_thumb{thumb_ext}"
+        thumbnail_url = _upload_to_supabase(thumb_data, thumb_path, "image/webp")
 
     return CompressedUpload(
         url=url,
         original_size=original_size,
         stored_size=len(data),
         content_type=content_type,
+        thumbnail_url=thumbnail_url
     )

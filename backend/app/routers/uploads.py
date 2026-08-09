@@ -14,7 +14,7 @@ class UploadResponse(BaseModel):
     original_size: int
     stored_size: int
     content_type: str
-
+    thumbnail_url: str | None = None
 
 @router.post("", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
 def upload_file(
@@ -31,4 +31,5 @@ def upload_file(
         original_size=result.original_size,
         stored_size=result.stored_size,
         content_type=result.content_type,
+        thumbnail_url=result.thumbnail_url,
     )
