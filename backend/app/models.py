@@ -19,12 +19,6 @@ class StudentType(str, enum.Enum):
     outhouse = "outhouse"
 
 
-class CertificateCategory(str, enum.Enum):
-    fdp = "FDP"
-    external = "external"
-    nptel = "NPTEL"
-    ieee = "IEEE"
-
 
 class CertificateStatus(str, enum.Enum):
     pending = "pending"
@@ -92,7 +86,6 @@ class Employee(Base):
     department: Mapped[Department | None] = relationship(back_populates="employees")
     dependents: Mapped[list["Dependent"]] = relationship(back_populates="employee")
     coordinated_students: Mapped[list["Student"]] = relationship(back_populates="coordinator")
-    verified_certificates: Mapped[list["Certificate"]] = relationship(back_populates="verifier")
     achievements: Mapped[list["Achievement"]] = relationship("Achievement", foreign_keys="[Achievement.employee_id]", back_populates="employee")
     verified_achievements: Mapped[list["Achievement"]] = relationship("Achievement", foreign_keys="[Achievement.verified_by]", back_populates="verifier")
 
@@ -129,30 +122,8 @@ class Student(Base):
 
     department: Mapped[Department | None] = relationship(back_populates="students")
     coordinator: Mapped[Employee | None] = relationship(back_populates="coordinated_students")
-    certificates: Mapped[list["Certificate"]] = relationship(back_populates="student")
     achievements: Mapped[list["Achievement"]] = relationship(back_populates="student")
 
-
-class Certificate(Base):
-    __tablename__ = "certificates"
-
-    cert_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    student_id: Mapped[int] = mapped_column(ForeignKey("students.student_id"), nullable=False)
-    title: Mapped[str] = mapped_column(String(200), nullable=False)
-    issuer: Mapped[str | None] = mapped_column(String(200))
-    category: Mapped[CertificateCategory] = mapped_column(Enum(CertificateCategory), nullable=False)
-    file_url: Mapped[str] = mapped_column(String(500), nullable=False)
-    status: Mapped[CertificateStatus] = mapped_column(
-        Enum(CertificateStatus), nullable=False, default=CertificateStatus.pending
-    )
-    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    verified_by: Mapped[int | None] = mapped_column(ForeignKey("employees.emp_id"))
-    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    is_featured: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
-    thumbnail_url: Mapped[str | None] = mapped_column(String(500))
-
-    student: Mapped[Student] = relationship(back_populates="certificates")
-    verifier: Mapped[Employee | None] = relationship(back_populates="verified_certificates")
 
 
 class Achievement(AchievementMixin, Base):
