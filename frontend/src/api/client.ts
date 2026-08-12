@@ -53,7 +53,7 @@ export interface TokenResponse {
 }
 
 export interface AchievementRecord {
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "verified" | "approved" | "rejected";
   submitted_at: string;
   file_url: string;
   verified_by: number | null;

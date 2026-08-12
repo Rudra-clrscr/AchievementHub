@@ -22,6 +22,7 @@ class StudentType(str, enum.Enum):
 
 class CertificateStatus(str, enum.Enum):
     pending = "pending"
+    verified = "verified"
     approved = "approved"
     rejected = "rejected"
 

@@ -37,9 +37,9 @@ export function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const cls = status === "approved" ? "badge-approved" : status === "rejected" ? "badge-rejected" : "badge-pending";
-  const label = status === "approved" ? "Verified" : status === "rejected" ? "Rejected" : "Pending Review";
+export function StatusBadge({ status }: { status: string }) {
+  const cls = status === "approved" ? "badge-approved" : status === "verified" ? "badge-verified" : status === "rejected" ? "badge-rejected" : "badge-pending";
+  const label = status === "approved" ? "Approved" : status === "verified" ? "Verified" : status === "rejected" ? "Rejected" : "Pending Review";
   return <span className={`badge ${cls}`}>{label}</span>;
 }
 
