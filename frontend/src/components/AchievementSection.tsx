@@ -261,7 +261,7 @@ export function AchievementPendingSection({ title, idKey, api, token, category, 
               </div>
               <div className="achievement-body" style={{ flex: 1 }}>
                 <div className="achievement-title">
-                  Student #{String(r.student_id ?? "")} — {String(r.title ?? "")}
+                  {r.owner_type === "employee" ? `Faculty #${String(r.employee_id ?? "")}` : `Student #${String(r.student_id ?? "")}`} — {String(r.title ?? "")}
                 </div>
                 <div className="achievement-meta">
                   Category: {String(r.category ?? "")}

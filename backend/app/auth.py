@@ -100,6 +100,17 @@ def verifier_scope_filter(employee: Employee):
         return Student.coordinator_id == employee.emp_id
     return Student.department_id == employee.department_id
 
+def faculty_verifier_scope_filter(verifier: Employee):
+    """Scope filter for verifying faculty achievements.
+    Only Admins (HOD/Clerk) can verify faculty achievements, and only for
+    faculty in their own department. Faculty coordinators cannot verify
+    other faculty.
+    """
+    if verifier.role not in ADMIN_ROLES:
+        # Returning a condition that is always False in SQLAlchemy
+        return Employee.emp_id == None
+    return Employee.department_id == verifier.department_id
+
 
 def get_current_identity(
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)

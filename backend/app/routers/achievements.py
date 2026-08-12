@@ -3,7 +3,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_identity, get_current_verifier, verifier_scope_filter
+from sqlalchemy import or_
+
+from app.auth import get_current_identity, get_current_verifier, verifier_scope_filter, faculty_verifier_scope_filter
 from app.database import get_db
 from app.models import Achievement, CertificateStatus, Employee, OwnerType, Student
 from app.schemas import AchievementCreate, AchievementOut, AchievementVerify
@@ -55,8 +57,9 @@ def list_pending(
     verifier: Employee = Depends(get_current_verifier),
     db: Session = Depends(get_db),
 ):
-    # Only verify student achievements for now
-    return (
+    # Retrieve pending achievements for students (based on verifier scope)
+    # and employees (based on faculty verifier scope)
+    student_records = (
         db.query(Achievement)
         .join(Student, Achievement.student_id == Student.student_id)
         .filter(
@@ -64,9 +67,19 @@ def list_pending(
             Achievement.status == CertificateStatus.pending,
             Achievement.owner_type == OwnerType.student,
         )
-        .order_by(Achievement.submitted_at.asc())
-        .all()
     )
+
+    employee_records = (
+        db.query(Achievement)
+        .join(Employee, Achievement.employee_id == Employee.emp_id)
+        .filter(
+            faculty_verifier_scope_filter(verifier),
+            Achievement.status == CertificateStatus.pending,
+            Achievement.owner_type == OwnerType.employee,
+        )
+    )
+
+    return student_records.union(employee_records).order_by(Achievement.submitted_at.asc()).all()
 
 
 @router.patch("/{record_id}/verify", response_model=AchievementOut)
@@ -76,15 +89,17 @@ def verify_achievement(
     verifier: Employee = Depends(get_current_verifier),
     db: Session = Depends(get_db),
 ):
+    # Find the record, ensuring the verifier has scope whether it's a student or employee achievement
     record = (
         db.query(Achievement)
         .outerjoin(Student, Achievement.student_id == Student.student_id)
+        .outerjoin(Employee, Achievement.employee_id == Employee.emp_id)
         .filter(
             Achievement.id == record_id,
-            # If it's a student achievement, apply the verifier scope filter.
-            # If it's a faculty achievement, we might need a different rule, but for now we'll just check student.
-            Achievement.owner_type == OwnerType.student, 
-            verifier_scope_filter(verifier)
+            or_(
+                (Achievement.owner_type == OwnerType.student) & verifier_scope_filter(verifier),
+                (Achievement.owner_type == OwnerType.employee) & faculty_verifier_scope_filter(verifier)
+            )
         )
         .first()
     )
