@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { achievementsApi, FACULTY_CATEGORIES, type AchievementRecord } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { AchievementPendingSection, AchievementSubmitSection } from "../components/AchievementSection";
+import { AchievementPendingSection, AchievementSubmitSection, StatusBadge } from "../components/AchievementSection";
 import { StudentAssignment } from "../components/StudentAssignment";
 import { Sidebar, TopBar, useDisplayName, type NavItem } from "../components/Shell";
 
@@ -30,7 +30,8 @@ function DashboardOverview({ token, onAdd }: { token: string; onAdd: () => void 
     const all = records ?? [];
     return {
       total: all.length,
-      verified: all.filter((r) => r.status === "approved").length,
+      approved: all.filter((r) => r.status === "approved").length,
+      verified: all.filter((r) => r.status === "verified").length,
       pending: all.filter((r) => r.status === "pending").length,
       rejected: all.filter((r) => r.status === "rejected").length,
     };
@@ -53,8 +54,12 @@ function DashboardOverview({ token, onAdd }: { token: string; onAdd: () => void 
           <div className="stat-card-value">{stats.total}</div>
         </div>
         <div className="card stat-card">
+          <div className="stat-card-label">Approved</div>
+          <div className="stat-card-value green">{stats.approved}</div>
+        </div>
+        <div className="card stat-card">
           <div className="stat-card-label">Verified</div>
-          <div className="stat-card-value green">{stats.verified}</div>
+          <div className="stat-card-value gold">{stats.verified}</div>
         </div>
         <div className="card stat-card">
           <div className="stat-card-label">Pending Review</div>
@@ -80,9 +85,7 @@ function DashboardOverview({ token, onAdd }: { token: string; onAdd: () => void 
               <div className="achievement-meta">{String(r.category)}</div>
             </div>
             <div className="achievement-right">
-              <span className={`badge badge-${r.status === "approved" ? "approved" : r.status === "rejected" ? "rejected" : "pending"}`}>
-                {r.status === "approved" ? "Verified" : r.status === "rejected" ? "Rejected" : "Pending Review"}
-              </span>
+              <StatusBadge status={r.status} />
               <span className="achievement-date">{new Date(r.submitted_at).toLocaleDateString()}</span>
             </div>
           </div>

@@ -7,7 +7,7 @@ from sqlalchemy import or_
 
 from app.auth import get_current_identity, get_current_verifier, verifier_scope_filter, faculty_verifier_scope_filter
 from app.database import get_db
-from app.models import Achievement, CertificateStatus, Employee, OwnerType, Student
+from app.models import Achievement, CertificateStatus, Employee, OwnerType, Student, EmployeeRole
 from app.schemas import AchievementCreate, AchievementOut, AchievementVerify
 
 router = APIRouter(prefix="/achievements", tags=["achievements"])
@@ -59,25 +59,47 @@ def list_pending(
 ):
     # Retrieve pending achievements for students (based on verifier scope)
     # and employees (based on faculty verifier scope)
-    student_records = (
-        db.query(Achievement)
-        .join(Student, Achievement.student_id == Student.student_id)
-        .filter(
-            verifier_scope_filter(verifier),
-            Achievement.status == CertificateStatus.pending,
-            Achievement.owner_type == OwnerType.student,
-        )
-    )
 
-    employee_records = (
-        db.query(Achievement)
-        .join(Employee, Achievement.employee_id == Employee.emp_id)
-        .filter(
-            faculty_verifier_scope_filter(verifier),
-            Achievement.status == CertificateStatus.pending,
-            Achievement.owner_type == OwnerType.employee,
+    if verifier.role == EmployeeRole.admin_clerk:
+        student_records = (
+            db.query(Achievement)
+            .join(Student, Achievement.student_id == Student.student_id)
+            .filter(
+                verifier_scope_filter(verifier),
+                Achievement.status == CertificateStatus.verified,
+                Achievement.owner_type == OwnerType.student,
+            )
         )
-    )
+
+        employee_records = (
+            db.query(Achievement)
+            .join(Employee, Achievement.employee_id == Employee.emp_id)
+            .filter(
+                faculty_verifier_scope_filter(verifier),
+                Achievement.status == CertificateStatus.verified,
+                Achievement.owner_type == OwnerType.employee,
+            )
+        )
+    else:
+        student_records = (
+            db.query(Achievement)
+            .join(Student, Achievement.student_id == Student.student_id)
+            .filter(
+                verifier_scope_filter(verifier),
+                Achievement.status == CertificateStatus.pending,
+                Achievement.owner_type == OwnerType.student,
+            )
+        )
+
+        employee_records = (
+            db.query(Achievement)
+            .join(Employee, Achievement.employee_id == Employee.emp_id)
+            .filter(
+                faculty_verifier_scope_filter(verifier),
+                Achievement.status == CertificateStatus.pending,
+                Achievement.owner_type == OwnerType.employee,
+            )
+        )
 
     return student_records.union(employee_records).order_by(Achievement.submitted_at.asc()).all()
 
@@ -113,7 +135,15 @@ def verify_achievement(
             detail="Cannot approve a record without a verified file_url",
         )
 
-    record.status = CertificateStatus.approved if payload.approve else CertificateStatus.rejected
+    if verifier.role == EmployeeRole.admin_clerk:
+        if record.status != CertificateStatus.verified and payload.approve:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Admin can only approve records that are already verified.",
+            )
+        record.status = CertificateStatus.approved if payload.approve else CertificateStatus.rejected
+    else:
+        record.status = CertificateStatus.verified if payload.approve else CertificateStatus.rejected
     record.verified_by = verifier.emp_id
     record.verified_at = datetime.now(timezone.utc)
     

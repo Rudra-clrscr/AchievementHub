@@ -98,7 +98,9 @@ def verifier_scope_filter(employee: Employee):
     """
     if employee.role == EmployeeRole.faculty_coordinator:
         return Student.coordinator_id == employee.emp_id
-    return Student.department_id == employee.department_id
+    elif employee.role in ADMIN_ROLES:
+        return Student.department_id == employee.department_id
+    return Student.student_id == None
 
 def faculty_verifier_scope_filter(verifier: Employee):
     """Scope filter for verifying faculty achievements.
@@ -106,10 +108,9 @@ def faculty_verifier_scope_filter(verifier: Employee):
     faculty in their own department. Faculty coordinators cannot verify
     other faculty.
     """
-    if verifier.role not in ADMIN_ROLES:
-        # Returning a condition that is always False in SQLAlchemy
-        return Employee.emp_id == None
-    return Employee.department_id == verifier.department_id
+    if verifier.role == EmployeeRole.admin_hod or verifier.role == EmployeeRole.admin_clerk:
+        return Employee.department_id == verifier.department_id
+    return Employee.emp_id == None
 
 
 def get_current_identity(
