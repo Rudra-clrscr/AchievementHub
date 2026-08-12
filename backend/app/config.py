@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480
-    cors_origins: str = "http://localhost:5173,http://localhost:5174"
+    cors_origins: str = "http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173"
     supabase_url: str
     supabase_service_key: str
     supabase_storage_bucket: str = "achievements"
