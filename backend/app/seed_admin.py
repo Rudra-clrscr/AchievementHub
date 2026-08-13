@@ -8,14 +8,14 @@ Run with: python -m app.seed_admin
 
 from app.auth import hash_password
 from app.database import SessionLocal
-from app.models import Department, Employee, EmployeeRole
+from app.models import Department, Employee, EmployeeRole, EmployeeRoleAssignment
 
 
 def run():
     db = SessionLocal()
     try:
         if db.query(Employee).filter(Employee.email == "hod@example.edu").first():
-            print("Admin (HOD) account already present, skipping.")
+            print("Admin+HOD account already present, skipping.")
             return
 
         dept = db.query(Department).first()
@@ -29,14 +29,15 @@ def run():
             phone_number="9888888888",
             salary=120000,
             password_hash=hash_password("hod123"),
-            role=EmployeeRole.admin_hod,
             department_id=dept.dept_id,
         )
+        admin_hod.roles.append(EmployeeRoleAssignment(role=EmployeeRole.admin))
+        admin_hod.roles.append(EmployeeRoleAssignment(role=EmployeeRole.hod))
         db.add(admin_hod)
         db.commit()
 
-        print(f"Seeded admin (HOD) into department '{dept.dept_name}':")
-        print(f"  admin (HOD) login: hod@example.edu / hod123")
+        print(f"Seeded admin+hod into department '{dept.dept_name}':")
+        print(f"  admin+hod login: hod@example.edu / hod123  (will prompt for a role)")
     finally:
         db.close()
 

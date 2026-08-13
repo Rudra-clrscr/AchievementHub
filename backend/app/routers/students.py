@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_admin
 from app.database import get_db
-from app.models import Employee, EmployeeRole, Student
+from app.models import Employee, EmployeeRole, EmployeeRoleAssignment, Student
 from app.schemas import AssignCoordinatorRequest, CoordinatorOut, StudentAdminOut
 
 router = APIRouter(prefix="/students", tags=["students"])
@@ -47,7 +47,10 @@ def list_coordinators(
 ):
     return (
         db.query(Employee)
-        .filter(Employee.role == EmployeeRole.faculty_coordinator, Employee.department_id == admin.department_id)
+        .filter(
+            Employee.roles.any(EmployeeRoleAssignment.role == EmployeeRole.faculty),
+            Employee.department_id == admin.department_id,
+        )
         .order_by(Employee.name)
         .all()
     )
@@ -68,7 +71,7 @@ def assign_coordinator(
         db.query(Employee)
         .filter(
             Employee.emp_id == payload.coordinator_id,
-            Employee.role == EmployeeRole.faculty_coordinator,
+            Employee.roles.any(EmployeeRoleAssignment.role == EmployeeRole.faculty),
             Employee.department_id == admin.department_id,
         )
         .first()

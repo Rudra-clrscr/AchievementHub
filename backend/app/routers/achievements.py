@@ -60,7 +60,7 @@ def list_pending(
     # Retrieve pending achievements for students (based on verifier scope)
     # and employees (based on faculty verifier scope)
 
-    if verifier.role == EmployeeRole.admin_clerk:
+    if verifier.active_role == EmployeeRole.admin.value:
         student_records = (
             db.query(Achievement)
             .join(Student, Achievement.student_id == Student.student_id)
@@ -101,7 +101,12 @@ def list_pending(
             )
         )
 
-    return student_records.union(employee_records).order_by(Achievement.submitted_at.asc()).all()
+    # union_all, not union: owner_type makes the two queries mutually
+    # exclusive already (a row can never appear in both), and plain union's
+    # deduplication needs an equality operator for every selected column --
+    # Achievement.metadata_fields is `json`, which Postgres has none for,
+    # so union() throws "could not identify an equality operator for type json".
+    return student_records.union_all(employee_records).order_by(Achievement.submitted_at.asc()).all()
 
 
 @router.patch("/{record_id}/verify", response_model=AchievementOut)
@@ -135,14 +140,19 @@ def verify_achievement(
             detail="Cannot approve a record without a verified file_url",
         )
 
-    if verifier.role == EmployeeRole.admin_clerk:
-        if record.status != CertificateStatus.verified and payload.approve:
+    if verifier.active_role == EmployeeRole.admin.value:
+        if record.status != CertificateStatus.verified:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Admin can only approve records that are already verified.",
+                detail="Admin can only act on records that are already verified.",
             )
         record.status = CertificateStatus.approved if payload.approve else CertificateStatus.rejected
     else:
+        if record.status != CertificateStatus.pending:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="This record has already been reviewed.",
+            )
         record.status = CertificateStatus.verified if payload.approve else CertificateStatus.rejected
     record.verified_by = verifier.emp_id
     record.verified_at = datetime.now(timezone.utc)

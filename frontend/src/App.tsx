@@ -50,7 +50,7 @@ function AppRoutes() {
       <Route
         path="/coordinator"
         element={
-          <RequireRole roles={["faculty_coordinator", "admin_hod", "admin_clerk"]}>
+          <RequireRole roles={["faculty", "hod", "admin"]}>
             <CoordinatorDashboard />
           </RequireRole>
         }

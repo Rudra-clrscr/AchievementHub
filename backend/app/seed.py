@@ -5,7 +5,7 @@ Run with: python -m app.seed
 
 from app.auth import hash_password
 from app.database import SessionLocal
-from app.models import Department, Employee, EmployeeRole, Student, StudentType
+from app.models import Department, Employee, EmployeeRole, EmployeeRoleAssignment, Student, StudentType
 
 
 def run():
@@ -25,9 +25,9 @@ def run():
             phone_number="9999999999",
             salary=80000,
             password_hash=hash_password("coordinator123"),
-            role=EmployeeRole.faculty_coordinator,
             department_id=dept.dept_id,
         )
+        coordinator.roles.append(EmployeeRoleAssignment(role=EmployeeRole.faculty))
         db.add(coordinator)
         db.flush()
 
@@ -41,22 +41,27 @@ def run():
         )
         db.add(student)
 
+        # Holds both admin and hod roles -- exercises the login role picker
+        # out of the box, and matches what the old single admin_hod role
+        # could do (department-level student verification + faculty
+        # verification) before roles were split apart.
         admin_hod = Employee(
             name="Dr. Vikram Nair",
             email="hod@example.edu",
             phone_number="9888888888",
             salary=120000,
             password_hash=hash_password("hod123"),
-            role=EmployeeRole.admin_hod,
             department_id=dept.dept_id,
         )
+        admin_hod.roles.append(EmployeeRoleAssignment(role=EmployeeRole.admin))
+        admin_hod.roles.append(EmployeeRoleAssignment(role=EmployeeRole.hod))
         db.add(admin_hod)
         db.commit()
 
         print("Seeded:")
-        print(f"  coordinator login: coordinator@example.edu / coordinator123")
-        print(f"  admin (HOD) login: hod@example.edu / hod123")
-        print(f"  student login:     student@example.edu / student123")
+        print(f"  faculty login:        coordinator@example.edu / coordinator123")
+        print(f"  admin+hod login:      hod@example.edu / hod123  (will prompt for a role)")
+        print(f"  student login:        student@example.edu / student123")
     finally:
         db.close()
 

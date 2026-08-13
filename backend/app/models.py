@@ -9,9 +9,9 @@ from app.database import Base
 
 class EmployeeRole(str, enum.Enum):
     principal = "principal"
-    admin_hod = "admin_hod"
-    admin_clerk = "admin_clerk"
-    faculty_coordinator = "faculty_coordinator"
+    faculty = "faculty"
+    hod = "hod"
+    admin = "admin"
 
 
 class StudentType(str, enum.Enum):
@@ -81,14 +81,30 @@ class Employee(Base):
     phone_number: Mapped[str | None] = mapped_column(String(20))
     salary: Mapped[float | None] = mapped_column(Float)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[EmployeeRole] = mapped_column(Enum(EmployeeRole), nullable=False)
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.dept_id"))
+    hod_id: Mapped[int | None] = mapped_column(ForeignKey("employees.emp_id"))
 
     department: Mapped[Department | None] = relationship(back_populates="employees")
     dependents: Mapped[list["Dependent"]] = relationship(back_populates="employee")
     coordinated_students: Mapped[list["Student"]] = relationship(back_populates="coordinator")
     achievements: Mapped[list["Achievement"]] = relationship("Achievement", foreign_keys="[Achievement.employee_id]", back_populates="employee")
     verified_achievements: Mapped[list["Achievement"]] = relationship("Achievement", foreign_keys="[Achievement.verified_by]", back_populates="verifier")
+    roles: Mapped[list["EmployeeRoleAssignment"]] = relationship(back_populates="employee", cascade="all, delete-orphan")
+    hod: Mapped["Employee | None"] = relationship(remote_side=[emp_id], foreign_keys=[hod_id], back_populates="supervised_faculty")
+    supervised_faculty: Mapped[list["Employee"]] = relationship(foreign_keys=[hod_id], back_populates="hod")
+
+    @property
+    def role_names(self) -> list[str]:
+        return [assignment.role.value for assignment in self.roles]
+
+
+class EmployeeRoleAssignment(Base):
+    __tablename__ = "employee_roles"
+
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.emp_id"), primary_key=True)
+    role: Mapped[EmployeeRole] = mapped_column(Enum(EmployeeRole), primary_key=True)
+
+    employee: Mapped[Employee] = relationship(back_populates="roles")
 
 
 class Dependent(Base):

@@ -52,6 +52,15 @@ export interface TokenResponse {
   role: string;
 }
 
+export interface LoginResult {
+  requires_role_selection: boolean;
+  access_token?: string;
+  token_type?: string;
+  role?: string;
+  roles?: string[];
+  pending_token?: string;
+}
+
 export interface AchievementRecord {
   status: "pending" | "verified" | "approved" | "rejected";
   submitted_at: string;
@@ -169,9 +178,37 @@ export const studentsApi = {
     ),
 };
 
+export interface AdminFaculty {
+  emp_id: number;
+  name: string;
+  email: string;
+  department_id: number | null;
+  hod_id: number | null;
+  hod_name: string | null;
+}
+
+export interface Hod {
+  emp_id: number;
+  name: string;
+}
+
+export const employeesApi = {
+  listFaculty: (token: string) => request<AdminFaculty[]>("/employees/faculty", {}, token),
+  listHods: (token: string) => request<Hod[]>("/employees/hods", {}, token),
+  assignHod: (token: string, empId: number, hodId: number) =>
+    request<AdminFaculty>(
+      `/employees/${empId}/hod`,
+      { method: "PATCH", body: JSON.stringify({ hod_id: hodId }) },
+      token
+    ),
+};
+
 export const api = {
   login: (email: string, password: string) =>
-    request<TokenResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+    request<LoginResult>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+
+  selectRole: (pendingToken: string, role: string) =>
+    request<LoginResult>("/auth/select-role", { method: "POST", body: JSON.stringify({ pending_token: pendingToken, role }) }),
 
   register: (payload: RegisterPayload) =>
     request<TokenResponse>("/auth/register", { method: "POST", body: JSON.stringify(payload) }),

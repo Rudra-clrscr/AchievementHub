@@ -48,9 +48,9 @@ def get_current_student(
 
 
 VERIFIER_ROLES = {
-    EmployeeRole.faculty_coordinator.value,
-    EmployeeRole.admin_hod.value,
-    EmployeeRole.admin_clerk.value,
+    EmployeeRole.faculty.value,
+    EmployeeRole.hod.value,
+    EmployeeRole.admin.value,
 }
 
 
@@ -59,56 +59,63 @@ def get_current_verifier(
 ) -> Employee:
     payload = _decode_token(token)
     if payload.get("entity_type") != "employee" or payload.get("role") not in VERIFIER_ROLES:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Faculty coordinator or admin access only")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Faculty, HOD, or admin access only")
     employee = db.get(Employee, int(payload["sub"]))
     if employee is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Employee not found")
+    employee.active_role = payload["role"]
     return employee
 
 
 ADMIN_ROLES = {
-    EmployeeRole.admin_hod.value,
-    EmployeeRole.admin_clerk.value,
+    EmployeeRole.admin.value,
 }
 
 
 def get_current_admin(
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
 ) -> Employee:
-    """Stricter than get_current_verifier: only Admin (HOD/Clerk), not
-    faculty coordinators. Assigning which coordinator a student belongs to
-    is an admin-level action -- a coordinator reassigning their own
-    students would be able to hand off the students they don't want to
-    review, which defeats the point of the assignment."""
+    """Stricter than get_current_verifier: only Admin, not faculty or HOD.
+    Assigning which coordinator/HOD someone reports to is an admin-level
+    action -- a coordinator or HOD reassigning their own reports would be
+    able to hand off the ones they don't want to review, which defeats the
+    point of the assignment."""
     payload = _decode_token(token)
     if payload.get("entity_type") != "employee" or payload.get("role") not in ADMIN_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access only")
     employee = db.get(Employee, int(payload["sub"]))
     if employee is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Employee not found")
+    employee.active_role = payload["role"]
     return employee
 
 
 def verifier_scope_filter(employee: Employee):
-    """A faculty coordinator only sees/acts on their own assigned students
-    (one coordinator per class, per the spec). An Admin (HOD/Clerk) sees/
-    acts on every student in their department -- one tier up, matching the
-    spec's "Admin ... Department level" scope. Principal is out of scope
-    here; that role is about global monitoring/reporting, not verification.
+    """A faculty member only sees/acts on their own assigned students (one
+    coordinator per class, per the spec). Admin sees/acts on every student
+    in their department -- the tier-2 view, matching the spec's "Admin ...
+    Department level" scope. Principal is out of scope here; that role is
+    about global monitoring/reporting, not verification. Scoping is keyed
+    off the token's active_role (the role picked at login), not the
+    employee's full role set, since a multi-role employee acts as one role
+    per session.
     """
-    if employee.role == EmployeeRole.faculty_coordinator:
+    if employee.active_role == EmployeeRole.faculty.value:
         return Student.coordinator_id == employee.emp_id
-    elif employee.role in ADMIN_ROLES:
+    elif employee.active_role == EmployeeRole.admin.value:
         return Student.department_id == employee.department_id
     return Student.student_id == None
 
 def faculty_verifier_scope_filter(verifier: Employee):
-    """Scope filter for verifying faculty achievements.
-    Only Admins (HOD/Clerk) can verify faculty achievements, and only for
-    faculty in their own department. Faculty coordinators cannot verify
-    other faculty.
+    """Scope filter for verifying faculty-owned achievements.
+    HOD verifies only the faculty explicitly assigned to them (hod_id),
+    mirroring how a faculty coordinator only sees their assigned students.
+    Admin sees every faculty member in their department -- the tier-2
+    view. Faculty cannot verify other faculty.
     """
-    if verifier.role == EmployeeRole.admin_hod or verifier.role == EmployeeRole.admin_clerk:
+    if verifier.active_role == EmployeeRole.hod.value:
+        return Employee.hod_id == verifier.emp_id
+    elif verifier.active_role == EmployeeRole.admin.value:
         return Employee.department_id == verifier.department_id
     return Employee.emp_id == None
 
@@ -121,4 +128,29 @@ def get_current_identity(
     entity = db.get(model, int(payload["sub"]))
     if entity is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account not found")
+    if isinstance(entity, Employee):
+        entity.active_role = payload.get("role")
     return entity
+
+
+PENDING_TOKEN_EXPIRE_MINUTES = 5
+
+
+def create_pending_token(*, subject_id: int) -> str:
+    """Short-lived token identifying an employee who has passed the
+    password check but hasn't picked which of their roles to act as this
+    session. Carries no `role` claim, so it can't be used against any
+    role-gated dependency -- only /auth/select-role accepts it."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=PENDING_TOKEN_EXPIRE_MINUTES)
+    payload = {"sub": str(subject_id), "entity_type": "employee_pending", "exp": expire}
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def resolve_pending_employee(token: str, db: Session) -> Employee:
+    payload = _decode_token(token)
+    if payload.get("entity_type") != "employee_pending":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired role-selection token")
+    employee = db.get(Employee, int(payload["sub"]))
+    if employee is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Employee not found")
+    return employee

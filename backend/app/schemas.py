@@ -16,6 +16,24 @@ class TokenResponse(BaseModel):
     role: str
 
 
+class LoginResult(BaseModel):
+    """Either a real session (requires_role_selection=False, access_token
+    set) or a prompt to pick a role (requires_role_selection=True, roles +
+    pending_token set, no access_token yet)."""
+
+    requires_role_selection: bool = False
+    access_token: str | None = None
+    token_type: str = "bearer"
+    role: str | None = None
+    roles: list[str] | None = None
+    pending_token: str | None = None
+
+
+class SelectRoleRequest(BaseModel):
+    pending_token: str
+    role: str
+
+
 class MeResponse(BaseModel):
     id: int
     name: str
@@ -111,4 +129,23 @@ class StudentAdminOut(BaseModel):
 
 class AssignCoordinatorRequest(BaseModel):
     coordinator_id: int
-    coordinator_id: int
+
+
+class HodOut(BaseModel):
+    emp_id: int
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
+class FacultyAdminOut(BaseModel):
+    emp_id: int
+    name: str
+    email: str
+    department_id: int | None
+    hod_id: int | None
+    hod_name: str | None
+
+
+class AssignHodRequest(BaseModel):
+    hod_id: int
