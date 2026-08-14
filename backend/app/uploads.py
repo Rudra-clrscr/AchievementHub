@@ -550,6 +550,14 @@ def _generate_image_thumbnail(raw: bytes) -> tuple[bytes, str]:
         return b"", ""
 
 
+def _store_locally(data: bytes, path: str) -> str:
+    local_dir = Path("uploads") / Path(path).parent
+    local_dir.mkdir(parents=True, exist_ok=True)
+    file_path = Path("uploads") / path
+    file_path.write_bytes(data)
+    return f"/uploads/files/{path}"
+
+
 def _upload_to_supabase(data: bytes, path: str, content_type: str) -> str:
     upload_url = f"{settings.supabase_url}/storage/v1/object/{settings.supabase_storage_bucket}/{path}"
     response = httpx.post(
@@ -603,9 +611,18 @@ def compress_and_store(upload: UploadFile, subfolder: str) -> CompressedUpload:
         data, ext = raw, Path(upload.filename or "").suffix.lower()
 
     content_type = CONTENT_TYPES.get(ext, original_content_type)
+<<<<<<< Updated upstream
     file_id = uuid.uuid4().hex
     path = f"{subfolder}/{file_id}{ext}"
     url = _upload_to_supabase(data, path, content_type)
+=======
+    path = f"{subfolder}/{uuid.uuid4().hex}{ext}"
+
+    if settings.use_local_storage:
+        url = _store_locally(data, path)
+    else:
+        url = _upload_to_supabase(data, path, content_type)
+>>>>>>> Stashed changes
 
     thumbnail_url = None
     thumb_data, thumb_ext = b"", ""

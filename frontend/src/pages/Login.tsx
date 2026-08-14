@@ -79,6 +79,7 @@ export function Login() {
 
               {error && <p className="field-error">{error}</p>}
 
+<<<<<<< Updated upstream
               <div className="form-actions" style={{ flexDirection: "column", gap: "0.6rem" }}>
                 {roleChoices.map((role) => (
                   <button
@@ -129,6 +130,15 @@ export function Login() {
               </p>
             </>
           )}
+=======
+          <p className="auth-footer">
+            New to AchievementHub? <Link to={intent ? `/register?as=${intent}` : "/register"}>Create an account</Link>
+          </p>
+          <p className="auth-footer">Faculty & Admin use the same sign-in form.</p>
+          <p className="auth-footer">
+            <Link to="/">&larr; Back</Link>
+          </p>
+>>>>>>> Stashed changes
         </div>
       </div>
     </div>

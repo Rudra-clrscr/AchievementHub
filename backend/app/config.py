@@ -8,9 +8,16 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480
+<<<<<<< Updated upstream
     cors_origins: str = "http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173"
     supabase_url: str
     supabase_service_key: str
+=======
+    cors_origins: str = "http://localhost:5173,http://localhost:5174"
+    use_local_storage: bool = False
+    supabase_url: str = "https://your-project-ref.supabase.co"
+    supabase_service_key: str = "your-service-role-key"
+>>>>>>> Stashed changes
     supabase_storage_bucket: str = "achievements"
 
     @property

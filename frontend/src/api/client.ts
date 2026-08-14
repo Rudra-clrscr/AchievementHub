@@ -62,7 +62,11 @@ export interface LoginResult {
 }
 
 export interface AchievementRecord {
+<<<<<<< Updated upstream
   status: "pending" | "verified" | "approved" | "rejected";
+=======
+  status: "pending" | "pending_hod" | "pending_admin" | "revision_required" | "approved" | "rejected";
+>>>>>>> Stashed changes
   submitted_at: string;
   file_url: string;
   verified_by: number | null;

@@ -22,7 +22,13 @@ class StudentType(str, enum.Enum):
 
 class CertificateStatus(str, enum.Enum):
     pending = "pending"
+<<<<<<< Updated upstream
     verified = "verified"
+=======
+    pending_hod = "pending_hod"
+    pending_admin = "pending_admin"
+    revision_required = "revision_required"
+>>>>>>> Stashed changes
     approved = "approved"
     rejected = "rejected"
 
@@ -87,6 +93,7 @@ class Employee(Base):
     department: Mapped[Department | None] = relationship(back_populates="employees")
     dependents: Mapped[list["Dependent"]] = relationship(back_populates="employee")
     coordinated_students: Mapped[list["Student"]] = relationship(back_populates="coordinator")
+<<<<<<< Updated upstream
     achievements: Mapped[list["Achievement"]] = relationship("Achievement", foreign_keys="[Achievement.employee_id]", back_populates="employee")
     verified_achievements: Mapped[list["Achievement"]] = relationship("Achievement", foreign_keys="[Achievement.verified_by]", back_populates="verifier")
     roles: Mapped[list["EmployeeRoleAssignment"]] = relationship(back_populates="employee", cascade="all, delete-orphan")
@@ -105,6 +112,11 @@ class EmployeeRoleAssignment(Base):
     role: Mapped[EmployeeRole] = mapped_column(Enum(EmployeeRole), primary_key=True)
 
     employee: Mapped[Employee] = relationship(back_populates="roles")
+=======
+    verified_certificates: Mapped[list["Certificate"]] = relationship(
+        back_populates="verifier", foreign_keys="[Certificate.verified_by]"
+    )
+>>>>>>> Stashed changes
 
 
 class Dependent(Base):
@@ -142,11 +154,31 @@ class Student(Base):
     achievements: Mapped[list["Achievement"]] = relationship(back_populates="student")
 
 
+<<<<<<< Updated upstream
 
 class Achievement(AchievementMixin, Base):
     __tablename__ = "achievements"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+=======
+class Certificate(AchievementMixin, Base):
+    __tablename__ = "certificates"
+
+    cert_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    issuer: Mapped[str | None] = mapped_column(String(200))
+    category: Mapped[CertificateCategory] = mapped_column(Enum(CertificateCategory), nullable=False)
+
+    student: Mapped[Student | None] = relationship(back_populates="certificates")
+    employee: Mapped[Employee | None] = relationship(foreign_keys="[Certificate.employee_id]")
+    verifier: Mapped[Employee | None] = relationship(back_populates="verified_certificates", foreign_keys="[Certificate.verified_by]")
+
+
+class ResearchPublication(AchievementMixin, Base):
+    __tablename__ = "research_publications"
+
+    pub_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+>>>>>>> Stashed changes
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     category: Mapped[str] = mapped_column(String(100), nullable=False)
     sub_category: Mapped[str | None] = mapped_column(String(100))

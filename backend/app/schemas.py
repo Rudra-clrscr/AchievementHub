@@ -70,8 +70,36 @@ class AchievementVerify(BaseModel):
     remarks: str | None = None
 
 
+<<<<<<< Updated upstream
 class AchievementOut(BaseModel):
     id: int
+=======
+class CertificateOut(BaseModel):
+    cert_id: int
+    student_id: int | None = None
+    employee_id: int | None = None
+    title: str
+    issuer: str | None
+    category: CertificateCategory
+    file_url: str
+    status: CertificateStatus
+    submitted_at: datetime
+    verified_by: int | None
+    verified_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class PublicationCreate(BaseModel):
+    title: str
+    venue: str | None = None
+    publication_date: datetime | None = None
+    file_url: str
+
+
+class PublicationOut(BaseModel):
+    pub_id: int
+>>>>>>> Stashed changes
     student_id: int | None
     employee_id: int | None
     owner_type: str

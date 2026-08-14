@@ -728,12 +728,54 @@
 .assign-select:disabled {
   opacity: 0.6;
 }
-@media (max-width: 560px) {
-  .queue-row .achievement-body {
-    flex-basis: 100%;
-  }
-  .queue-row .queue-link,
-  .queue-row .queue-actions {
-    margin-left: 54px;
-  }
+
+/* ---------- modal (decline remarks) ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 26, 48, 0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
 }
+.modal-card {
+  width: 100%;
+  max-width: 480px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px rgba(16, 26, 48, 0.18);
+  padding: 24px;
+}
+.modal-title {
+  font-family: var(--serif);
+  font-size: 22px;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.modal-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+.modal-char-counter {
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+.modal-char-counter.valid {
+  color: var(--green-600);
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
+}
+

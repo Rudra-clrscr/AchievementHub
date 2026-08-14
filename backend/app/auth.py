@@ -90,6 +90,7 @@ def get_current_admin(
     return employee
 
 
+<<<<<<< Updated upstream
 def verifier_scope_filter(employee: Employee):
     """A faculty member only sees/acts on their own assigned students (one
     coordinator per class, per the spec). Admin sees/acts on every student
@@ -118,6 +119,64 @@ def faculty_verifier_scope_filter(verifier: Employee):
     elif verifier.active_role == EmployeeRole.admin.value:
         return Employee.department_id == verifier.department_id
     return Employee.emp_id == None
+=======
+from sqlalchemy import and_, or_
+from app.models import CertificateStatus, OwnerType
+
+def verifier_scope_filter(employee: Employee, model=None):
+    """A faculty coordinator only sees/acts on their own assigned students at 'pending' stage.
+    An Admin HOD sees/acts on:
+      1. Students in their department at 'pending_hod' stage.
+      2. Employee-owned achievements submitted by faculty/employees in their department at 'pending_hod' stage.
+    Admin Clerk filter remains as department-wide pending check.
+    """
+    if employee.role == EmployeeRole.faculty_coordinator:
+        # Faculty coordinators only review Student-origin items assigned to them
+        condition = and_(
+            model.owner_type == OwnerType.student,
+            Student.coordinator_id == employee.emp_id,
+        ) if model is not None else (Student.coordinator_id == employee.emp_id)
+        if model is not None:
+            condition = and_(condition, model.status == CertificateStatus.pending)
+        return condition
+
+    elif employee.role == EmployeeRole.admin_hod:
+        # HOD reviews both:
+        # a) Student-origin items in HOD's department at pending_hod stage
+        # b) Employee-origin items submitted by employees in HOD's department at pending_hod stage
+        student_cond = and_(
+            model.owner_type == OwnerType.student,
+            Student.department_id == employee.department_id,
+        ) if model is not None else (Student.department_id == employee.department_id)
+
+        if model is not None:
+            employee_cond = and_(
+                model.owner_type == OwnerType.employee,
+                Employee.department_id == employee.department_id,
+            )
+            condition = or_(student_cond, employee_cond)
+            condition = and_(condition, model.status == CertificateStatus.pending_hod)
+        else:
+            condition = student_cond
+
+        return condition
+
+    elif employee.role == EmployeeRole.admin_clerk:
+        # Admin Clerk final approval stage: reviews all items at pending_admin stage
+        if model is not None:
+            student_cond = and_(
+                model.owner_type == OwnerType.student,
+                Student.department_id == employee.department_id,
+            )
+            employee_cond = and_(
+                model.owner_type == OwnerType.employee,
+                Employee.department_id == employee.department_id,
+            )
+            return and_(or_(student_cond, employee_cond), model.status == CertificateStatus.pending_admin)
+        return Student.department_id == employee.department_id
+
+    return Student.department_id == employee.department_id
+>>>>>>> Stashed changes
 
 
 def get_current_identity(

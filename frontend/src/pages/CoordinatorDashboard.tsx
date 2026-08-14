@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { achievementsApi, FACULTY_CATEGORIES, type AchievementRecord } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+<<<<<<< Updated upstream
 import { AchievementPendingSection, AchievementSubmitSection, StatusBadge } from "../components/AchievementSection";
+=======
+import {
+  AchievementMyListSection,
+  AchievementPendingSection,
+  AchievementSubmitSection,
+} from "../components/AchievementSection";
+>>>>>>> Stashed changes
 import { StudentAssignment } from "../components/StudentAssignment";
 import { FacultyAssignment } from "../components/FacultyAssignment";
 import { Sidebar, TopBar, useDisplayName, type NavItem } from "../components/Shell";
@@ -101,7 +109,12 @@ export function CoordinatorDashboard() {
     { key: "submit", label: "Submit Achievement" },
     ...(isAdmin ? [{ key: "students", label: "Students" }, { key: "faculty", label: "Faculty" }] : []),
   ];
+<<<<<<< Updated upstream
   const [view, setView] = useState<string>("achievements");
+=======
+  const [view, setView] = useState<string>(ACHIEVEMENT_TYPES[0].key);
+  const [showAddModal, setShowAddModal] = useState(false);
+>>>>>>> Stashed changes
   const token = session!.token;
   const name = useDisplayName(token);
   const [pendingCount, setPendingCount] = useState(0);
@@ -119,6 +132,11 @@ export function CoordinatorDashboard() {
               <div className="greeting-eyebrow">{roleLabel}</div>
               <div className="greeting-name">{name || " "}</div>
             </div>
+            {activeType && (
+              <button className="btn btn-primary btn-sm" onClick={() => setShowAddModal(true)}>
+                + Add Achievement
+              </button>
+            )}
           </div>
 
           {view === "achievements" ? (
@@ -143,6 +161,37 @@ export function CoordinatorDashboard() {
                 category="achievements"
                 onCountChange={setPendingCount}
               />
+
+              <div style={{ marginTop: 24 }}>
+                <AchievementMyListSection
+                  key={`mine-${activeType.key}`}
+                  title={activeType.label}
+                  idKey={activeType.idKey}
+                  fields={activeType.fields}
+                  api={activeType.api}
+                  token={token}
+                  category={activeType.key}
+                />
+              </div>
+
+              {showAddModal && (
+                <div className="modal-backdrop" onClick={() => setShowAddModal(false)}>
+                  <div className="modal-card" style={{ maxWidth: 640, maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                      <div className="modal-title">Submit Personal {activeType.label}</div>
+                      <button className="btn btn-outline btn-sm" onClick={() => setShowAddModal(false)}>Close</button>
+                    </div>
+                    <AchievementSubmitSection
+                      title={activeType.label}
+                      idKey={activeType.idKey}
+                      fields={activeType.fields}
+                      api={activeType.api}
+                      token={token}
+                      category={activeType.key}
+                    />
+                  </div>
+                </div>
+              )}
             </>
           ) : view === "my_achievements" ? (
             <DashboardOverview token={token} onAdd={() => setView("submit")} />

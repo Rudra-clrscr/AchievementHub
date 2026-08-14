@@ -27,10 +27,20 @@ function DashboardOverview({ token, onAdd }: { token: string; onAdd: () => void 
     const all = records ?? [];
     return {
       total: all.length,
+<<<<<<< Updated upstream
       approved: all.filter((r) => r.status === "approved").length,
       verified: all.filter((r) => r.status === "verified").length,
       pending: all.filter((r) => r.status === "pending").length,
       rejected: all.filter((r) => r.status === "rejected").length,
+=======
+      verified: all.filter((r) => r.record.status === "approved").length,
+      pending: all.filter((r) =>
+        ["pending", "pending_hod", "pending_admin"].includes(r.record.status)
+      ).length,
+      rejected: all.filter((r) =>
+        ["rejected", "revision_required"].includes(r.record.status)
+      ).length,
+>>>>>>> Stashed changes
     };
   }, [records]);
 
@@ -64,7 +74,7 @@ function DashboardOverview({ token, onAdd }: { token: string; onAdd: () => void 
           <div className="stat-card-value orange">{stats.pending}</div>
         </div>
         <div className="card stat-card">
-          <div className="stat-card-label">Rejected</div>
+          <div className="stat-card-label">Rejected / Revision</div>
           <div className="stat-card-value red">{stats.rejected}</div>
         </div>
       </div>
@@ -83,8 +93,13 @@ function DashboardOverview({ token, onAdd }: { token: string; onAdd: () => void 
               <div className="achievement-meta">{String(r.category)}</div>
             </div>
             <div className="achievement-right">
+<<<<<<< Updated upstream
               <StatusBadge status={r.status} />
               <span className="achievement-date">{new Date(r.submitted_at).toLocaleDateString()}</span>
+=======
+              <StatusBadge status={r.record.status} />
+              <span className="achievement-date">{new Date(r.record.submitted_at).toLocaleDateString()}</span>
+>>>>>>> Stashed changes
             </div>
           </div>
         ))}

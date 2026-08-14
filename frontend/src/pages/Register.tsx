@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiError, type Department } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
 export function Register() {
+  const [searchParams] = useSearchParams();
+  const intent = searchParams.get("as") ?? "";
+  const isInstitutionalRole = intent === "faculty" || intent === "hod";
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,8 +20,10 @@ export function Register() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.departments().then(setDepartments).catch(() => setDepartments([]));
-  }, []);
+    if (!isInstitutionalRole) {
+      api.departments().then(setDepartments).catch(() => setDepartments([]));
+    }
+  }, [isInstitutionalRole]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +46,8 @@ export function Register() {
     }
   };
 
+  const roleLabel = intent === "hod" ? "HOD" : "Faculty";
+
   return (
     <div className="auth-shell">
       <div className="auth-panel-dark">
@@ -52,56 +60,70 @@ export function Register() {
 
       <div className="auth-panel-form">
         <div className="auth-card">
-          <h1 className="auth-title">Create an account</h1>
-          <p className="auth-subtitle">Register as a student to start submitting achievements</p>
+          <h1 className="auth-title">
+            {isInstitutionalRole ? `${roleLabel} Access` : "Create an account"}
+          </h1>
+          <p className="auth-subtitle">
+            {isInstitutionalRole
+              ? `${roleLabel} accounts are provisioned by the institution. Please sign in with your institutional credentials.`
+              : "Register as a student to start submitting achievements"}
+          </p>
 
-          <form onSubmit={handleSubmit}>
-            <div className="field">
-              <label>Full name</label>
-              <input value={name} onChange={(e) => setName(e.target.value)} required />
+          {isInstitutionalRole ? (
+            <div style={{ marginTop: "1.5rem", textAlign: "center" }}>
+              <Link to={`/login?as=${intent}`} className="btn btn-primary" style={{ display: "block", textDecoration: "none" }}>
+                Sign in as {roleLabel}
+              </Link>
             </div>
-            <div className="field">
-              <label>Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-            </div>
-            <div className="field">
-              <label>Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                minLength={8}
-                required
-              />
-            </div>
-            <div className="field">
-              <label>Student type</label>
-              <select value={studentType} onChange={(e) => setStudentType(e.target.value as "inhouse" | "outhouse")}>
-                <option value="inhouse">Inhouse</option>
-                <option value="outhouse">Outhouse</option>
-              </select>
-            </div>
-            {departments.length > 0 && (
+          ) : (
+            <form onSubmit={handleSubmit}>
               <div className="field">
-                <label>Department</label>
-                <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
-                  <option value="">Select department</option>
-                  {departments.map((d) => (
-                    <option key={d.dept_id} value={d.dept_id}>
-                      {d.dept_name}
-                    </option>
-                  ))}
+                <label>Full name</label>
+                <input value={name} onChange={(e) => setName(e.target.value)} required />
+              </div>
+              <div className="field">
+                <label>Email</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              </div>
+              <div className="field">
+                <label>Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  minLength={8}
+                  required
+                />
+              </div>
+              <div className="field">
+                <label>Student type</label>
+                <select value={studentType} onChange={(e) => setStudentType(e.target.value as "inhouse" | "outhouse")}>
+                  <option value="inhouse">Inhouse</option>
+                  <option value="outhouse">Outhouse</option>
                 </select>
               </div>
-            )}
-            {error && <p className="field-error">{error}</p>}
-            <button className="btn btn-primary" type="submit" disabled={submitting} style={{ width: "100%" }}>
-              {submitting ? "Creating account..." : "Create account"}
-            </button>
-          </form>
+              {departments.length > 0 && (
+                <div className="field">
+                  <label>Department</label>
+                  <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+                    <option value="">Select department</option>
+                    {departments.map((d) => (
+                      <option key={d.dept_id} value={d.dept_id}>
+                        {d.dept_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {error && <p className="field-error">{error}</p>}
+              <button className="btn btn-primary" type="submit" disabled={submitting} style={{ width: "100%" }}>
+                {submitting ? "Creating account..." : "Create account"}
+              </button>
+            </form>
+          )}
 
           <p className="auth-footer">
-            Already have an account? <Link to="/login">Sign in</Link>
+            Already have an account? <Link to={intent ? `/login?as=${intent}` : "/login"}>Sign in</Link>
           </p>
         </div>
       </div>

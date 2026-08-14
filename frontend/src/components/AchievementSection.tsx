@@ -38,8 +38,28 @@ export function formatBytes(n: number): string {
 }
 
 export function StatusBadge({ status }: { status: string }) {
+<<<<<<< Updated upstream
   const cls = status === "approved" ? "badge-approved" : status === "verified" ? "badge-verified" : status === "rejected" ? "badge-rejected" : "badge-pending";
   const label = status === "approved" ? "Approved" : status === "verified" ? "Verified" : status === "rejected" ? "Rejected" : "Pending Review";
+=======
+  let cls = "badge-pending";
+  let label = "Pending Faculty Review";
+
+  if (status === "approved") {
+    cls = "badge-approved";
+    label = "Verified";
+  } else if (status === "rejected" || status === "revision_required") {
+    cls = "badge-rejected";
+    label = status === "revision_required" ? "Revision Required" : "Rejected";
+  } else if (status === "pending_hod") {
+    cls = "badge-pending";
+    label = "Pending HOD Review";
+  } else if (status === "pending_admin") {
+    cls = "badge-pending";
+    label = "Pending Admin Review";
+  }
+
+>>>>>>> Stashed changes
   return <span className={`badge ${cls}`}>{label}</span>;
 }
 
@@ -93,7 +113,8 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
       setFile(null);
       refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Submission failed");
+      const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Submission failed";
+      setError(msg);
     } finally {
       setStage(null);
     }
@@ -167,6 +188,7 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
         </div>
       </form>
 
+<<<<<<< Updated upstream
       <div className="card section-card">
         <div className="section-header">
           <h2>Your submissions</h2>
@@ -191,11 +213,69 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
             <div className="achievement-right">
               <StatusBadge status={r.status} />
               <span className="achievement-date">{new Date(r.submitted_at).toLocaleDateString()}</span>
+=======
+      <AchievementMyListSection
+        title={title}
+        idKey={idKey}
+        fields={fields}
+        api={api}
+        token={token}
+        category={category}
+        records={records}
+      />
+    </>
+  );
+}
+
+export function AchievementMyListSection({
+  title,
+  idKey,
+  fields,
+  api,
+  token,
+  category,
+  records: initialRecords,
+}: StudentProps & { records?: AchievementRecord[] }) {
+  const [records, setRecords] = useState<AchievementRecord[]>(initialRecords ?? []);
+  const titleField = fields[0];
+  const metaFields = fields.slice(1);
+
+  useEffect(() => {
+    if (!initialRecords) {
+      api.mine(token).then(setRecords).catch(() => {});
+    } else {
+      setRecords(initialRecords);
+    }
+  }, [token, initialRecords]);
+
+  return (
+    <div className="card section-card">
+      <div className="section-header">
+        <h2>Your Personal Submissions</h2>
+      </div>
+      {records.length === 0 && <div className="achievement-empty">No personal achievements submitted yet.</div>}
+      {records.map((r) => (
+        <div className="achievement-row" key={String(r[idKey])}>
+          <div className={`achievement-avatar avatar-${category}`}>
+            {String(r[titleField.name] ?? "?").charAt(0).toUpperCase()}
+          </div>
+          <div className="achievement-body">
+            <div className="achievement-title">{String(r[titleField.name] ?? "")}</div>
+            <div className="achievement-meta">
+              {metaFields
+                .map((f) => r[f.name])
+                .filter(Boolean)
+                .join(" · ") || title}
+>>>>>>> Stashed changes
             </div>
           </div>
-        ))}
-      </div>
-    </>
+          <div className="achievement-right">
+            <StatusBadge status={r.status} />
+            <span className="achievement-date">{new Date(r.submitted_at).toLocaleDateString()}</span>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -209,10 +289,86 @@ interface CoordinatorProps {
   onCountChange?: (count: number) => void;
 }
 
+<<<<<<< Updated upstream
 export function AchievementPendingSection({ title, idKey, api, token, category, onCountChange }: CoordinatorProps) {
   const [records, setRecords] = useState<AchievementRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [remarks, setRemarks] = useState<Record<number, string>>({});
+=======
+interface DeclineTarget {
+  id: number;
+  itemTitle: string;
+}
+
+function DeclineModal({
+  target,
+  onClose,
+  onSubmit,
+}: {
+  target: DeclineTarget;
+  onClose: () => void;
+  onSubmit: (remarks: string) => Promise<void>;
+}) {
+  const [remarks, setRemarks] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isValid = remarks.trim().length >= 10;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isValid || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit(remarks.trim());
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to decline submission");
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-title">Decline Submission</div>
+        <div className="modal-subtitle">Providing feedback helps the submitter understand what revisions are required for "{target.itemTitle}".</div>
+        <form onSubmit={handleSubmit}>
+          <div className="field">
+            <label htmlFor="decline-remarks">Reason / Remarks (minimum 10 characters)</label>
+            <textarea
+              id="decline-remarks"
+              placeholder="e.g. Please provide a clearer certificate copy showing the issuing authority's stamp."
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              rows={4}
+              autoFocus
+            />
+            <div className={`modal-char-counter ${isValid ? "valid" : ""}`}>
+              {remarks.trim().length} / 10 characters min
+            </div>
+          </div>
+          {error && <p className="field-error">{error}</p>}
+          <div className="modal-actions">
+            <button type="button" className="btn btn-outline" onClick={onClose} disabled={submitting}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={!isValid || submitting}>
+              {submitting ? "Submitting..." : "Confirm Decline"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export function AchievementPendingSection({ title, idKey, fields, api, token, category, onCountChange }: CoordinatorProps) {
+  const [records, setRecords] = useState<AchievementRecord[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [declineTarget, setDeclineTarget] = useState<DeclineTarget | null>(null);
+>>>>>>> Stashed changes
 
   const refresh = () => {
     api
@@ -226,21 +382,37 @@ export function AchievementPendingSection({ title, idKey, api, token, category, 
 
   useEffect(refresh, [token]);
 
-  const decide = async (id: number, approve: boolean) => {
+  const handleApprove = async (id: number) => {
     setError(null);
     try {
+<<<<<<< Updated upstream
       await api.verify(token, id, approve, remarks[id]);
       setRemarks((prev) => {
         const next = { ...prev };
         delete next[id];
         return next;
       });
+=======
+      await api.verify(token, id, true);
+>>>>>>> Stashed changes
       refresh();
-    } catch {
-      setError("Failed to update record");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update record");
     }
   };
 
+<<<<<<< Updated upstream
+=======
+  const handleDeclineSubmit = async (remarks: string) => {
+    if (!declineTarget) return;
+    await api.verify(token, declineTarget.id, false, remarks);
+    refresh();
+  };
+
+  const titleField = fields[0];
+  const metaFields = fields.slice(1);
+
+>>>>>>> Stashed changes
   return (
     <div className="card section-card">
       <div className="section-header">
@@ -249,6 +421,7 @@ export function AchievementPendingSection({ title, idKey, api, token, category, 
       {error && <p className="field-error">{error}</p>}
       {records.length === 0 && <div className="achievement-empty">Nothing pending.</div>}
       {records.map((r) => {
+<<<<<<< Updated upstream
         const id = Number(r[idKey]);
         const meta = (r.metadata_fields as Record<string, string>) || {};
         const metaEntries = Object.entries(meta).filter(([k]) => k !== "remarks");
@@ -301,10 +474,59 @@ export function AchievementPendingSection({ title, idKey, api, token, category, 
                   Approve
                 </button>
               </div>
+=======
+        const itemTitle = String(r[titleField.name] ?? title);
+        const recordId = Number(r[idKey]);
+        return (
+          <div className="queue-row" key={String(r[idKey])}>
+            <div className={`achievement-avatar avatar-${category}`}>
+              {itemTitle.charAt(0).toUpperCase()}
+            </div>
+            <div className="achievement-body">
+              <div className="achievement-title">
+                {r.owner_type === "employee" || (!r.student_id && r.employee_id)
+                  ? `Faculty/Staff #${String(r.employee_id ?? "")}`
+                  : `Student #${String(r.student_id ?? "")}`}{" "}
+                — {itemTitle}
+              </div>
+              <div className="achievement-meta">
+                {metaFields
+                  .map((f) => r[f.name])
+                  .filter(Boolean)
+                  .join(" · ")}
+                {" · "}
+                {new Date(r.submitted_at).toLocaleDateString()}
+              </div>
+            </div>
+            <a className="queue-link" href={absoluteFileUrl(r.file_url)} target="_blank" rel="noreferrer">
+              View
+            </a>
+            <div className="queue-actions">
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => setDeclineTarget({ id: recordId, itemTitle })}
+              >
+                Decline
+              </button>
+              <button className="btn btn-approve btn-sm" onClick={() => handleApprove(recordId)}>
+                Approve
+              </button>
+>>>>>>> Stashed changes
             </div>
           </div>
         );
       })}
+<<<<<<< Updated upstream
+=======
+
+      {declineTarget && (
+        <DeclineModal
+          target={declineTarget}
+          onClose={() => setDeclineTarget(null)}
+          onSubmit={handleDeclineSubmit}
+        />
+      )}
+>>>>>>> Stashed changes
     </div>
   );
 }
