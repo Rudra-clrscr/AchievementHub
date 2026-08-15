@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_admin
 from app.database import get_db
-from app.models import Employee, EmployeeRole, EmployeeRoleAssignment
-from app.schemas import AssignHodRequest, FacultyAdminOut, HodOut
+from app.models import Department, Employee, EmployeeRole, EmployeeRoleAssignment
+from app.schemas import AssignHodRequest, FacultyAdminOut, HodOut, PendingEmployeeOut
 
 router = APIRouter(prefix="/employees", tags=["employees"])
 
@@ -95,3 +95,67 @@ def assign_hod(
     db.commit()
     db.refresh(faculty)
     return _to_faculty_out(faculty, hod.name)
+
+
+def _to_pending_out(employee: Employee, department_name: str | None) -> PendingEmployeeOut:
+    return PendingEmployeeOut(
+        emp_id=employee.emp_id,
+        name=employee.name,
+        email=employee.email,
+        department_id=employee.department_id,
+        department_name=department_name,
+        requested_role=employee.role_names[0] if employee.role_names else "",
+    )
+
+
+@router.get("/pending", response_model=list[PendingEmployeeOut])
+def list_pending_registrations(
+    admin: Employee = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    pending = _in_admin_scope(
+        db.query(Employee).filter(Employee.is_approved == False),  # noqa: E712
+        admin,
+    ).order_by(Employee.name).all()
+    dept_ids = {e.department_id for e in pending if e.department_id}
+    names = {}
+    if dept_ids:
+        names = {d.dept_id: d.dept_name for d in db.query(Department).filter(Department.dept_id.in_(dept_ids)).all()}
+    return [_to_pending_out(e, names.get(e.department_id)) for e in pending]
+
+
+@router.patch("/{emp_id}/approve", response_model=PendingEmployeeOut)
+def approve_registration(
+    emp_id: int,
+    admin: Employee = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    employee = _in_admin_scope(
+        db.query(Employee).filter(Employee.emp_id == emp_id, Employee.is_approved == False),  # noqa: E712
+        admin,
+    ).first()
+    if employee is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pending registration not found")
+
+    employee.is_approved = True
+    db.commit()
+    db.refresh(employee)
+    department_name = employee.department.dept_name if employee.department else None
+    return _to_pending_out(employee, department_name)
+
+
+@router.delete("/{emp_id}/reject", status_code=status.HTTP_204_NO_CONTENT)
+def reject_registration(
+    emp_id: int,
+    admin: Employee = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    employee = _in_admin_scope(
+        db.query(Employee).filter(Employee.emp_id == emp_id, Employee.is_approved == False),  # noqa: E712
+        admin,
+    ).first()
+    if employee is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pending registration not found")
+
+    db.delete(employee)
+    db.commit()

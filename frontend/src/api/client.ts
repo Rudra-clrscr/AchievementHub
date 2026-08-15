@@ -153,6 +153,18 @@ export interface RegisterPayload {
   department_id?: number;
 }
 
+export interface EmployeeRegisterPayload {
+  name: string;
+  email: string;
+  password: string;
+  role: "faculty" | "hod";
+  department_id?: number;
+}
+
+export interface RegistrationSubmitted {
+  message: string;
+}
+
 export interface AdminStudent {
   student_id: number;
   name: string;
@@ -192,6 +204,15 @@ export interface Hod {
   name: string;
 }
 
+export interface PendingEmployee {
+  emp_id: number;
+  name: string;
+  email: string;
+  department_id: number | null;
+  department_name: string | null;
+  requested_role: string;
+}
+
 export const employeesApi = {
   listFaculty: (token: string) => request<AdminFaculty[]>("/employees/faculty", {}, token),
   listHods: (token: string) => request<Hod[]>("/employees/hods", {}, token),
@@ -201,6 +222,11 @@ export const employeesApi = {
       { method: "PATCH", body: JSON.stringify({ hod_id: hodId }) },
       token
     ),
+  listPending: (token: string) => request<PendingEmployee[]>("/employees/pending", {}, token),
+  approve: (token: string, empId: number) =>
+    request<PendingEmployee>(`/employees/${empId}/approve`, { method: "PATCH" }, token),
+  reject: (token: string, empId: number) =>
+    request<void>(`/employees/${empId}/reject`, { method: "DELETE" }, token),
 };
 
 export const api = {
@@ -212,6 +238,9 @@ export const api = {
 
   register: (payload: RegisterPayload) =>
     request<TokenResponse>("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
+
+  registerEmployee: (payload: EmployeeRegisterPayload) =>
+    request<RegistrationSubmitted>("/auth/register-employee", { method: "POST", body: JSON.stringify(payload) }),
 
   departments: () => request<Department[]>("/departments"),
 

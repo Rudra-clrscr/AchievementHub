@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { AchievementPendingSection, AchievementSubmitSection, StatusBadge } from "../components/AchievementSection";
 import { StudentAssignment } from "../components/StudentAssignment";
 import { FacultyAssignment } from "../components/FacultyAssignment";
+import { PendingRegistrations } from "../components/PendingRegistrations";
 import { Sidebar, TopBar, useDisplayName, type NavItem } from "../components/Shell";
 import { ROLE_LABELS } from "../roles";
 
@@ -99,7 +100,13 @@ export function CoordinatorDashboard() {
     { key: "achievements", label: "Verification Queue" },
     { key: "my_achievements", label: "My Achievements" },
     { key: "submit", label: "Submit Achievement" },
-    ...(isAdmin ? [{ key: "students", label: "Students" }, { key: "faculty", label: "Faculty" }] : []),
+    ...(isAdmin
+      ? [
+          { key: "students", label: "Students" },
+          { key: "faculty", label: "Faculty" },
+          { key: "registrations", label: "Registrations" },
+        ]
+      : []),
   ];
   const [view, setView] = useState<string>("achievements");
   const token = session!.token;
@@ -112,7 +119,22 @@ export function CoordinatorDashboard() {
     <div className="app-shell">
       <Sidebar items={navItems} active={view} onSelect={setView} />
       <div className="main">
-        <TopBar title={view === "achievements" ? "Verification Queue" : view === "submit" ? "Submit Achievement" : view === "students" ? "Student Roster" : view === "faculty" ? "Faculty Roster" : "My Achievements"} name={name} />
+        <TopBar
+          title={
+            view === "achievements"
+              ? "Verification Queue"
+              : view === "submit"
+                ? "Submit Achievement"
+                : view === "students"
+                  ? "Student Roster"
+                  : view === "faculty"
+                    ? "Faculty Roster"
+                    : view === "registrations"
+                      ? "Pending Registrations"
+                      : "My Achievements"
+          }
+          name={name}
+        />
         <div className="page">
           <div className="page-header">
             <div>
@@ -167,8 +189,10 @@ export function CoordinatorDashboard() {
           </div>
           ) : view === "students" ? (
             <StudentAssignment token={token} />
-          ) : (
+          ) : view === "faculty" ? (
             <FacultyAssignment token={token} />
+          ) : (
+            <PendingRegistrations token={token} />
           )}
         </div>
       </div>

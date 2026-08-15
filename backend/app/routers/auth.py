@@ -10,8 +10,17 @@ from app.auth import (
     verify_password,
 )
 from app.database import get_db
-from app.models import Employee, Student
-from app.schemas import LoginRequest, LoginResult, MeResponse, RegisterRequest, SelectRoleRequest, TokenResponse
+from app.models import Employee, EmployeeRole, EmployeeRoleAssignment, Student
+from app.schemas import (
+    EmployeeRegisterRequest,
+    LoginRequest,
+    LoginResult,
+    MeResponse,
+    RegisterRequest,
+    RegistrationSubmitted,
+    SelectRoleRequest,
+    TokenResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -20,6 +29,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     employee = db.query(Employee).filter(Employee.email == payload.email).first()
     if employee and verify_password(payload.password, employee.password_hash):
+        if not employee.is_approved:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your registration is pending admin approval.",
+            )
         roles = employee.role_names
         if not roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account has no roles assigned")
@@ -71,6 +85,33 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
     token = create_access_token(subject_id=student.student_id, entity_type="student", role="student")
     return TokenResponse(access_token=token, role="student")
+
+
+@router.post("/register-employee", response_model=RegistrationSubmitted, status_code=status.HTTP_201_CREATED)
+def register_employee(payload: EmployeeRegisterRequest, db: Session = Depends(get_db)):
+    """Faculty/HOD can self-register, unlike Admin. The account starts
+    unapproved (is_approved=False) and can't log in until an Admin
+    approves it -- self-assigning verification authority outright would
+    let anyone grant themselves review power over real submissions."""
+    email_taken = (
+        db.query(Employee).filter(Employee.email == payload.email).first()
+        or db.query(Student).filter(Student.email == payload.email).first()
+    )
+    if email_taken:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists")
+
+    employee = Employee(
+        name=payload.name,
+        email=payload.email,
+        password_hash=hash_password(payload.password),
+        department_id=payload.department_id,
+        is_approved=False,
+    )
+    employee.roles.append(EmployeeRoleAssignment(role=EmployeeRole(payload.role)))
+    db.add(employee)
+    db.commit()
+
+    return RegistrationSubmitted()
 
 
 @router.get("/me", response_model=MeResponse)

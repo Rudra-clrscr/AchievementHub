@@ -7,6 +7,8 @@ import { ROLE_LABELS } from "../roles";
 const SUBTITLE_BY_INTENT: Record<string, string> = {
   student: "Sign in to submit and track your achievements",
   faculty: "Sign in to review and verify student submissions",
+  hod: "Sign in to review submissions from your assigned faculty",
+  admin: "Sign in to manage assignments and publish verified achievements",
 };
 
 export function Login() {
@@ -120,10 +122,12 @@ export function Login() {
                 </button>
               </form>
 
-              <p className="auth-footer">
-                New to AchievementHub? <Link to="/register">Create an account</Link>
-              </p>
-              <p className="auth-footer">Faculty & Admin use the same sign-in form.</p>
+              {intent !== "admin" && (
+                <p className="auth-footer">
+                  New to AchievementHub?{" "}
+                  <Link to={intent ? `/register?as=${intent}` : "/register"}>Create an account</Link>
+                </p>
+              )}
               <p className="auth-footer">
                 <Link to="/">&larr; Back</Link>
               </p>

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr
 
@@ -47,6 +48,18 @@ class RegisterRequest(BaseModel):
     password: str
     student_type: StudentType
     department_id: int | None = None
+
+
+class EmployeeRegisterRequest(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    role: Literal["faculty", "hod"]
+    department_id: int | None = None
+
+
+class RegistrationSubmitted(BaseModel):
+    message: str = "Registration submitted. An admin will review and approve your account."
 
 
 class DepartmentOut(BaseModel):
@@ -149,3 +162,12 @@ class FacultyAdminOut(BaseModel):
 
 class AssignHodRequest(BaseModel):
     hod_id: int
+
+
+class PendingEmployeeOut(BaseModel):
+    emp_id: int
+    name: str
+    email: str
+    department_id: int | None
+    department_name: str | None
+    requested_role: str

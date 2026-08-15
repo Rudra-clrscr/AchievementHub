@@ -1,19 +1,19 @@
 import { useNavigate } from "react-router-dom";
 
-const ROLE_CHOICES = [
-  {
-    key: "student",
-    title: "Student",
-    desc: "Submit your certificates, publications, and other achievements for verification.",
-  },
+const CHOICES = [
   {
     key: "faculty",
-    title: "Faculty & Admin",
-    desc: "Review and verify achievement submissions from your students or department.",
+    title: "Faculty",
+    desc: "Submit your own achievements and review submissions from your assigned students.",
+  },
+  {
+    key: "hod",
+    title: "HOD",
+    desc: "Review achievement submissions from the faculty assigned to you.",
   },
 ] as const;
 
-export function Landing() {
+export function AccessFacultyType() {
   const navigate = useNavigate();
 
   return (
@@ -29,21 +29,27 @@ export function Landing() {
       <div className="auth-panel-form">
         <div className="auth-card">
           <h1 className="auth-title">Continue as</h1>
-          <p className="auth-subtitle">Choose how you'd like to access AchievementHub</p>
+          <p className="auth-subtitle">Choose your role</p>
 
           <div className="role-choice-list">
-            {ROLE_CHOICES.map((choice) => (
+            {CHOICES.map((choice) => (
               <button
                 key={choice.key}
                 type="button"
                 className="role-choice"
-                onClick={() => navigate(choice.key === "faculty" ? "/access/role" : `/login?as=${choice.key}`)}
+                onClick={() => navigate(`/login?as=${choice.key}`)}
               >
                 <span className="role-choice-title">{choice.title}</span>
                 <span className="role-choice-desc">{choice.desc}</span>
               </button>
             ))}
           </div>
+
+          <p className="auth-footer">
+            <a href="#" onClick={(e) => { e.preventDefault(); navigate("/access/role"); }}>
+              &larr; Back
+            </a>
+          </p>
         </div>
       </div>
     </div>

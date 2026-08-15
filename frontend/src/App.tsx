@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import "./App.css";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { Landing } from "./pages/Landing";
+import { AccessRole } from "./pages/AccessRole";
+import { AccessFacultyType } from "./pages/AccessFacultyType";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 import { StudentDashboard } from "./pages/StudentDashboard";
@@ -37,6 +39,8 @@ function AppRoutes() {
         }
       />
       <Route path="/landing" element={<Landing />} />
+      <Route path="/access/role" element={<AccessRole />} />
+      <Route path="/access/faculty-type" element={<AccessFacultyType />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route

@@ -83,6 +83,7 @@ class Employee(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.dept_id"))
     hod_id: Mapped[int | None] = mapped_column(ForeignKey("employees.emp_id"))
+    is_approved: Mapped[bool] = mapped_column(default=True, server_default="true", nullable=False)
 
     department: Mapped[Department | None] = relationship(back_populates="employees")
     dependents: Mapped[list["Dependent"]] = relationship(back_populates="employee")
