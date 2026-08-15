@@ -230,8 +230,8 @@ export const employeesApi = {
 };
 
 export const api = {
-  login: (email: string, password: string) =>
-    request<LoginResult>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  login: (email: string, password: string, role?: string) =>
+    request<LoginResult>("/auth/login", { method: "POST", body: JSON.stringify({ email, password, role }) }),
 
   selectRole: (pendingToken: string, role: string) =>
     request<LoginResult>("/auth/select-role", { method: "POST", body: JSON.stringify({ pending_token: pendingToken, role }) }),

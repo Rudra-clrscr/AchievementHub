@@ -34,7 +34,7 @@ export function Login() {
     setError(null);
     setSubmitting(true);
     try {
-      const result = await api.login(email, password);
+      const result = await api.login(email, password, intent || undefined);
       if (result.requires_role_selection) {
         setRoleChoices(result.roles ?? []);
         setPendingToken(result.pending_token ?? null);

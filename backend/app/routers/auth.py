@@ -37,6 +37,16 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         roles = employee.role_names
         if not roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account has no roles assigned")
+
+        if payload.role:
+            if payload.role not in roles:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"This account does not hold the {payload.role} role",
+                )
+            token = create_access_token(subject_id=employee.emp_id, entity_type="employee", role=payload.role)
+            return LoginResult(access_token=token, role=payload.role)
+
         if len(roles) == 1:
             token = create_access_token(subject_id=employee.emp_id, entity_type="employee", role=roles[0])
             return LoginResult(access_token=token, role=roles[0])

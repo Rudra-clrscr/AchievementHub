@@ -9,6 +9,10 @@ from app.models import CertificateStatus, ParticipationRole, StudentType
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    # Role intent picked in the pre-login chooser (Faculty/HOD/Admin). When set
+    # and the account actually holds it, login goes straight to a token for
+    # that role -- no post-password role picker needed.
+    role: str | None = None
 
 
 class TokenResponse(BaseModel):
