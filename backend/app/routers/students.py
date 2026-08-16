@@ -3,16 +3,19 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_admin
 from app.database import get_db
-from app.models import Employee, EmployeeRole, EmployeeRoleAssignment, Student
-from app.schemas import AssignCoordinatorRequest, CoordinatorOut, StudentAdminOut
+from app.models import Employee, EmployeeRole, EmployeeRoleAssignment, Section, Student
+from app.schemas import (
+    AssignCoordinatorRequest,
+    AssignSectionCoordinatorRequest,
+    CoordinatorOut,
+    SectionOut,
+    StudentAdminOut,
+)
 
 router = APIRouter(prefix="/students", tags=["students"])
 
 
 def _in_admin_scope(query, admin: Employee):
-    """Department students, plus students with no department yet (e.g. a
-    self-registered student who hasn't been placed anywhere) -- otherwise
-    an unassigned student could never be picked up by any admin."""
     return query.filter((Student.department_id == admin.department_id) | (Student.department_id.is_(None)))
 
 
@@ -22,6 +25,9 @@ def _to_admin_out(student: Student, coordinator_name: str | None) -> StudentAdmi
         name=student.name,
         email=student.email,
         department_id=student.department_id,
+        year=student.year,
+        section_id=student.section_id,
+        section_name=student.section.section_name if student.section else None,
         coordinator_id=student.coordinator_id,
         coordinator_name=coordinator_name,
     )
@@ -79,13 +85,43 @@ def assign_coordinator(
     if coordinator is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coordinator not found in your department")
 
-    # Keep department_id in sync with the assigned coordinator's department --
-    # verifier_scope_filter's admin branch is department-based, so a student
-    # left with department_id=None would vanish from every admin's queue the
-    # moment they're assigned a coordinator, even though the coordinator
-    # branch (coordinator_id-based) would still show them correctly.
     student.coordinator_id = coordinator.emp_id
     student.department_id = admin.department_id
     db.commit()
     db.refresh(student)
     return _to_admin_out(student, coordinator.name)
+
+
+@router.patch("/sections/{section_id}/coordinator", response_model=SectionOut)
+def assign_section_coordinator(
+    section_id: int,
+    payload: AssignSectionCoordinatorRequest,
+    admin: Employee = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    section = db.query(Section).filter(Section.section_id == section_id, Section.department_id == admin.department_id).first()
+    if section is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section not found in your department")
+
+    coordinator = (
+        db.query(Employee)
+        .filter(
+            Employee.emp_id == payload.coordinator_id,
+            Employee.roles.any(EmployeeRoleAssignment.role == EmployeeRole.faculty),
+            Employee.department_id == admin.department_id,
+        )
+        .first()
+    )
+    if coordinator is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Faculty coordinator not found in your department")
+
+    section.coordinator_id = coordinator.emp_id
+    
+    db.query(Student).filter(Student.section_id == section.section_id).update(
+        {"coordinator_id": coordinator.emp_id, "department_id": admin.department_id},
+        synchronize_session=False,
+    )
+    
+    db.commit()
+    db.refresh(section)
+    return section

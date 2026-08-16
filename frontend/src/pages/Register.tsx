@@ -15,6 +15,9 @@ export function Register() {
   const [studentType, setStudentType] = useState<"inhouse" | "outhouse">("inhouse");
   const [departmentId, setDepartmentId] = useState("");
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [year, setYear] = useState("");
+  const [sectionId, setSectionId] = useState("");
+  const [sections, setSections] = useState<{ section_id: number; section_name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -24,6 +27,17 @@ export function Register() {
   useEffect(() => {
     api.departments().then(setDepartments).catch(() => setDepartments([]));
   }, []);
+
+  useEffect(() => {
+    if (departmentId && year && !isEmployeeRole) {
+      api.sections(Number(departmentId), Number(year))
+        .then(setSections)
+        .catch(() => setSections([]));
+    } else {
+      setSections([]);
+      setSectionId("");
+    }
+  }, [departmentId, year, isEmployeeRole]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +60,8 @@ export function Register() {
           password,
           student_type: studentType,
           department_id: departmentId ? Number(departmentId) : undefined,
+          year: year ? Number(year) : undefined,
+          section_id: sectionId ? Number(sectionId) : undefined,
         });
         login(access_token, role);
         navigate("/student");
@@ -134,11 +150,38 @@ export function Register() {
             {departments.length > 0 && (
               <div className="field">
                 <label>Department</label>
-                <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+                <select value={departmentId} onChange={(e) => { setDepartmentId(e.target.value); setYear(""); setSectionId(""); }}>
                   <option value="">Select department</option>
                   {departments.map((d) => (
                     <option key={d.dept_id} value={d.dept_id}>
                       {d.dept_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {!isEmployeeRole && departmentId && (
+              <div className="field">
+                <label>Year of Study</label>
+                <select value={year} onChange={(e) => { setYear(e.target.value); setSectionId(""); }}>
+                  <option value="">Select Year</option>
+                  <option value="1">1st Year</option>
+                  <option value="2">2nd Year</option>
+                  <option value="3">3rd Year</option>
+                  <option value="4">4th Year</option>
+                </select>
+              </div>
+            )}
+
+            {!isEmployeeRole && departmentId && year && (
+              <div className="field">
+                <label>Section / Class</label>
+                <select value={sectionId} onChange={(e) => setSectionId(e.target.value)}>
+                  <option value="">Select Section</option>
+                  {sections.map((s) => (
+                    <option key={s.section_id} value={s.section_id}>
+                      {s.section_name}
                     </option>
                   ))}
                 </select>

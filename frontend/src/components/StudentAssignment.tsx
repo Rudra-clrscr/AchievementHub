@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError, studentsApi, type AdminStudent, type Coordinator } from "../api/client";
+import { api, ApiError, studentsApi, type AdminStudent, type Coordinator, type Section } from "../api/client";
 
 interface Props {
   token: string;
@@ -11,12 +11,29 @@ export function StudentAssignment({ token }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<number | null>(null);
 
+  // Section batch assignment state
+  const [selectedYear, setSelectedYear] = useState<string>("3");
+  const [sections, setSections] = useState<Section[]>([]);
+  const [selectedSectionId, setSelectedSectionId] = useState<string>("");
+  const [batchCoordinatorId, setBatchCoordinatorId] = useState<string>("");
+  const [batchSaving, setBatchSaving] = useState<boolean>(false);
+  const [batchSuccess, setBatchSuccess] = useState<string | null>(null);
+
   const refresh = () => {
     studentsApi.list(token).then(setStudents).catch(() => setError("Failed to load students"));
     studentsApi.coordinators(token).then(setCoordinators).catch(() => setError("Failed to load coordinators"));
   };
 
   useEffect(refresh, [token]);
+
+  // Load sections when selectedYear changes (assuming dept 2 for CS, or fetch dept sections)
+  useEffect(() => {
+    if (selectedYear) {
+      api.sections(2, Number(selectedYear))
+        .then(setSections)
+        .catch(() => setSections([]));
+    }
+  }, [selectedYear]);
 
   const assign = async (studentId: number, coordinatorId: number) => {
     if (!coordinatorId) return;
@@ -32,11 +49,64 @@ export function StudentAssignment({ token }: Props) {
     }
   };
 
+  const assignBatchSection = async () => {
+    if (!selectedSectionId || !batchCoordinatorId) return;
+    setError(null);
+    setBatchSuccess(null);
+    setBatchSaving(true);
+    try {
+      await studentsApi.assignSectionCoordinator(token, Number(selectedSectionId), Number(batchCoordinatorId));
+      setBatchSuccess("Batch coordinator assigned to section successfully!");
+      refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed batch section assignment");
+    } finally {
+      setBatchSaving(false);
+    }
+  };
+
   return (
     <div className="card section-card">
       <div className="section-header">
         <h2>Assign students to faculty coordinators</h2>
       </div>
+
+      {/* Batch Section Coordinator Assignment Control */}
+      <div style={{ background: "rgba(255,255,255,0.03)", padding: "16px", borderRadius: "8px", marginBottom: "24px", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <h3 style={{ fontSize: "14px", fontWeight: "600", marginBottom: "12px" }}>⚡ Batch Assign Coordinator by Section</h3>
+        <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+          <select className="assign-select" value={selectedYear} onChange={(e) => { setSelectedYear(e.target.value); setSelectedSectionId(""); }}>
+            <option value="1">1st Year</option>
+            <option value="2">2nd Year</option>
+            <option value="3">3rd Year</option>
+            <option value="4">4th Year</option>
+          </select>
+
+          <select className="assign-select" value={selectedSectionId} onChange={(e) => setSelectedSectionId(e.target.value)}>
+            <option value="">Select Section</option>
+            {sections.map((sec) => (
+              <option key={sec.section_id} value={sec.section_id}>
+                {sec.section_name}
+              </option>
+            ))}
+          </select>
+
+          <select className="assign-select" value={batchCoordinatorId} onChange={(e) => setBatchCoordinatorId(e.target.value)}>
+            <option value="">Select Faculty Coordinator</option>
+            {coordinators.map((c) => (
+              <option key={c.emp_id} value={c.emp_id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+
+          <button className="btn btn-primary" onClick={assignBatchSection} disabled={batchSaving || !selectedSectionId || !batchCoordinatorId}>
+            {batchSaving ? "Assigning..." : "Assign to Section Batch"}
+          </button>
+        </div>
+        {batchSuccess && <p style={{ color: "#4caf50", fontSize: "13px", marginTop: "8px" }}>{batchSuccess}</p>}
+      </div>
+
       {error && <p className="field-error">{error}</p>}
       {coordinators.length === 0 && (
         <div className="achievement-empty">
@@ -53,6 +123,8 @@ export function StudentAssignment({ token }: Props) {
             <div className="achievement-title">{s.name}</div>
             <div className="achievement-meta">
               {s.email}
+              {s.year ? ` · Year ${s.year}` : ""}
+              {s.section_name ? ` · Sec ${s.section_name}` : ""}
               {" · "}
               {s.coordinator_name ? `Assigned to ${s.coordinator_name}` : "Unassigned"}
             </div>

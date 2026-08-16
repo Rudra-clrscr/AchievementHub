@@ -70,6 +70,21 @@ class Department(Base):
 
     employees: Mapped[list["Employee"]] = relationship(back_populates="department")
     students: Mapped[list["Student"]] = relationship(back_populates="department")
+    sections: Mapped[list["Section"]] = relationship(back_populates="department")
+
+
+class Section(Base):
+    __tablename__ = "sections"
+
+    section_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    section_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    department_id: Mapped[int] = mapped_column(ForeignKey("departments.dept_id"), nullable=False)
+    coordinator_id: Mapped[int | None] = mapped_column(ForeignKey("employees.emp_id"), nullable=True)
+
+    department: Mapped[Department] = relationship(back_populates="sections")
+    coordinator: Mapped["Employee | None"] = relationship(back_populates="coordinated_sections")
+    students: Mapped[list["Student"]] = relationship(back_populates="section")
 
 
 class Employee(Base):
@@ -88,6 +103,7 @@ class Employee(Base):
     department: Mapped[Department | None] = relationship(back_populates="employees")
     dependents: Mapped[list["Dependent"]] = relationship(back_populates="employee")
     coordinated_students: Mapped[list["Student"]] = relationship(back_populates="coordinator")
+    coordinated_sections: Mapped[list[Section]] = relationship(back_populates="coordinator")
     achievements: Mapped[list["Achievement"]] = relationship("Achievement", foreign_keys="[Achievement.employee_id]", back_populates="employee")
     verified_achievements: Mapped[list["Achievement"]] = relationship("Achievement", foreign_keys="[Achievement.verified_by]", back_populates="verifier")
     roles: Mapped[list["EmployeeRoleAssignment"]] = relationship(back_populates="employee", cascade="all, delete-orphan")
@@ -137,9 +153,12 @@ class Student(Base):
     student_type: Mapped[StudentType] = mapped_column(Enum(StudentType), nullable=False)
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.dept_id"))
     coordinator_id: Mapped[int | None] = mapped_column(ForeignKey("employees.emp_id"))
+    section_id: Mapped[int | None] = mapped_column(ForeignKey("sections.section_id"))
+    year: Mapped[int | None] = mapped_column(Integer)
 
     department: Mapped[Department | None] = relationship(back_populates="students")
     coordinator: Mapped[Employee | None] = relationship(back_populates="coordinated_students")
+    section: Mapped[Section | None] = relationship(back_populates="students")
     achievements: Mapped[list["Achievement"]] = relationship(back_populates="student")
 
 

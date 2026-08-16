@@ -82,12 +82,23 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     if email_taken:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists")
 
+    # Auto-assign section coordinator if section has one
+    coordinator_id = None
+    if payload.section_id:
+        from app.models import Section
+        sec = db.query(Section).filter(Section.section_id == payload.section_id).first()
+        if sec and sec.coordinator_id:
+            coordinator_id = sec.coordinator_id
+
     student = Student(
         name=payload.name,
         email=payload.email,
         password_hash=hash_password(payload.password),
         student_type=payload.student_type,
         department_id=payload.department_id,
+        year=payload.year,
+        section_id=payload.section_id,
+        coordinator_id=coordinator_id,
     )
     db.add(student)
     db.commit()

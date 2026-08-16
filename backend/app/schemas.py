@@ -52,6 +52,8 @@ class RegisterRequest(BaseModel):
     password: str
     student_type: StudentType
     department_id: int | None = None
+    year: int | None = None
+    section_id: int | None = None
 
 
 class EmployeeRegisterRequest(BaseModel):
@@ -69,6 +71,16 @@ class RegistrationSubmitted(BaseModel):
 class DepartmentOut(BaseModel):
     dept_id: int
     dept_name: str
+
+    model_config = {"from_attributes": True}
+
+
+class SectionOut(BaseModel):
+    section_id: int
+    section_name: str
+    year: int
+    department_id: int
+    coordinator_id: int | None = None
 
     model_config = {"from_attributes": True}
 
@@ -106,12 +118,14 @@ class AchievementOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-
 class StudentOut(BaseModel):
     student_id: int
     name: str
     email: str
     student_type: StudentType
+    department_id: int | None = None
+    year: int | None = None
+    section_id: int | None = None
 
     model_config = {"from_attributes": True}
 
@@ -129,6 +143,8 @@ class FeedItem(BaseModel):
     thumbnail_url: str | None = None
 
     model_config = {"from_attributes": True}
+
+
 class CoordinatorOut(BaseModel):
     emp_id: int
     name: str
@@ -141,10 +157,18 @@ class StudentAdminOut(BaseModel):
     name: str
     email: str
     department_id: int | None
+    year: int | None = None
+    section_id: int | None = None
+    section_name: str | None = None
     coordinator_id: int | None
     coordinator_name: str | None
 
+
 class AssignCoordinatorRequest(BaseModel):
+    coordinator_id: int
+
+
+class AssignSectionCoordinatorRequest(BaseModel):
     coordinator_id: int
 
 

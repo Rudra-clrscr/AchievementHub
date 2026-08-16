@@ -145,12 +145,22 @@ export interface Department {
   dept_name: string;
 }
 
+export interface Section {
+  section_id: number;
+  section_name: string;
+  year: number;
+  department_id: number;
+  coordinator_id: number | null;
+}
+
 export interface RegisterPayload {
   name: string;
   email: string;
   password: string;
   student_type: "inhouse" | "outhouse";
   department_id?: number;
+  year?: number;
+  section_id?: number;
 }
 
 export interface EmployeeRegisterPayload {
@@ -170,6 +180,9 @@ export interface AdminStudent {
   name: string;
   email: string;
   department_id: number | null;
+  year?: number | null;
+  section_id?: number | null;
+  section_name?: string | null;
   coordinator_id: number | null;
   coordinator_name: string | null;
 }
@@ -185,6 +198,12 @@ export const studentsApi = {
   assignCoordinator: (token: string, studentId: number, coordinatorId: number) =>
     request<AdminStudent>(
       `/students/${studentId}/coordinator`,
+      { method: "PATCH", body: JSON.stringify({ coordinator_id: coordinatorId }) },
+      token
+    ),
+  assignSectionCoordinator: (token: string, sectionId: number, coordinatorId: number) =>
+    request<Section>(
+      `/students/sections/${sectionId}/coordinator`,
       { method: "PATCH", body: JSON.stringify({ coordinator_id: coordinatorId }) },
       token
     ),
@@ -243,6 +262,9 @@ export const api = {
     request<RegistrationSubmitted>("/auth/register-employee", { method: "POST", body: JSON.stringify(payload) }),
 
   departments: () => request<Department[]>("/departments"),
+
+  sections: (deptId: number, year?: number) =>
+    request<Section[]>(`/departments/${deptId}/sections${year ? `?year=${year}` : ""}`),
 
   me: (token: string) => request<MeResponse>("/auth/me", {}, token),
 };
