@@ -69,7 +69,18 @@ export function PublicFeed() {
           />
         </div>
         <div className="filters">
-          <select value={ownerType} onChange={(e) => setOwnerType(e.target.value)}>
+          <select 
+            value={ownerType} 
+            onChange={(e) => {
+              const newOwner = e.target.value;
+              setOwnerType(newOwner);
+              if (newOwner === "student" && !STUDENT_CATEGORIES.includes(category)) {
+                setCategory("");
+              } else if (newOwner === "employee" && !FACULTY_CATEGORIES.includes(category)) {
+                setCategory("");
+              }
+            }}
+          >
             <option value="">All Members</option>
             <option value="student">Students</option>
             <option value="employee">Faculty</option>
@@ -77,14 +88,25 @@ export function PublicFeed() {
 
           <select value={category} onChange={(e) => setCategory(e.target.value)}>
             <option value="">All Categories</option>
-            <optgroup label="Student Categories">
-              {STUDENT_CATEGORIES.map(c => <option key={`student-${c}`} value={c}>{c}</option>)}
-            </optgroup>
-            <optgroup label="Faculty Categories">
-              {FACULTY_CATEGORIES.map(c => <option key={`faculty-${c}`} value={c}>{c}</option>)}
-            </optgroup>
+            {(!ownerType || ownerType === "student") && (
+              <optgroup label="Student Categories">
+                {STUDENT_CATEGORIES.map((c) => (
+                  <option key={`student-${c}`} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {(!ownerType || ownerType === "employee") && (
+              <optgroup label="Faculty Categories">
+                {FACULTY_CATEGORIES.map((c) => (
+                  <option key={`faculty-${c}`} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
-
         </div>
         <div className="login-link">
           <Link to="/landing" className="btn-primary">Login to Submit</Link>
