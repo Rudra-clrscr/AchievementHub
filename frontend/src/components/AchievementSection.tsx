@@ -145,8 +145,14 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
         </div>
 
         <div className="form-section-label">Proof & Documents</div>
-        <label className="file-drop">
-          <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
+        <label className={`file-drop ${error && !file ? "file-drop-error" : ""}`}>
+          <input
+            type="file"
+            onChange={(e) => {
+              setFile(e.target.files?.[0] ?? null);
+              if (error) setError(null);
+            }}
+          />
           {file ? (
             <span className="file-drop-name">{file.name}</span>
           ) : (

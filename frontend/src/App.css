@@ -290,6 +290,10 @@
   border-color: var(--gold-500);
   background: var(--gold-100);
 }
+.file-drop-error {
+  border-color: var(--red-600) !important;
+  background: var(--red-100) !important;
+}
 .file-drop input {
   display: none;
 }
