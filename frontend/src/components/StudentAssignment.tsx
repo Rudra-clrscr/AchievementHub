@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError, studentsApi, type AdminStudent, type Coordinator, type Section } from "../api/client";
+import { api, ApiError, studentsApi, type AdminStudent, type Coordinator, type Department, type Section } from "../api/client";
 
 interface Props {
   token: string;
