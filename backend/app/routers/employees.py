@@ -97,6 +97,11 @@ def assign_hod(
         )
         .all()
     )
+    if existing_hods:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A different HOD is already assigned to this department"
+        )
 
     faculty.hod_id = hod.emp_id
     faculty.department_id = admin.department_id

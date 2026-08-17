@@ -26,14 +26,26 @@ export function StudentAssignment({ token }: Props) {
 
   useEffect(refresh, [token]);
 
-  // Load sections when selectedYear changes (assuming dept 2 for CS, or fetch dept sections)
+  const [selectedDeptId, setSelectedDeptId] = useState<string>("");
+  const [departments, setDepartments] = useState<Department[]>([]);
+
   useEffect(() => {
-    if (selectedYear) {
-      api.sections(2, Number(selectedYear))
+    api.departments().then((depts) => {
+      setDepartments(depts);
+      if (depts.length > 0) setSelectedDeptId(String(depts[0].dept_id));
+    }).catch(() => setDepartments([]));
+  }, []);
+
+  // Load sections when selectedYear or selectedDeptId changes
+  useEffect(() => {
+    if (selectedYear && selectedDeptId) {
+      api.sections(Number(selectedDeptId), Number(selectedYear))
         .then(setSections)
         .catch(() => setSections([]));
+    } else {
+      setSections([]);
     }
-  }, [selectedYear]);
+  }, [selectedYear, selectedDeptId]);
 
   const assign = async (studentId: number, coordinatorId: number) => {
     if (!coordinatorId) return;
@@ -75,6 +87,14 @@ export function StudentAssignment({ token }: Props) {
       <div style={{ background: "rgba(255,255,255,0.03)", padding: "16px", borderRadius: "8px", marginBottom: "24px", border: "1px solid rgba(255,255,255,0.08)" }}>
         <h3 style={{ fontSize: "14px", fontWeight: "600", marginBottom: "12px" }}>⚡ Batch Assign Coordinator by Section</h3>
         <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+          <select className="assign-select" value={selectedDeptId} onChange={(e) => { setSelectedDeptId(e.target.value); setSelectedSectionId(""); }}>
+            {departments.map((d) => (
+              <option key={d.dept_id} value={d.dept_id}>
+                {d.dept_name}
+              </option>
+            ))}
+          </select>
+
           <select className="assign-select" value={selectedYear} onChange={(e) => { setSelectedYear(e.target.value); setSelectedSectionId(""); }}>
             <option value="1">1st Year</option>
             <option value="2">2nd Year</option>

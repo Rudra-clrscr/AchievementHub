@@ -27,7 +27,8 @@ def upgrade() -> None:
         sa.Column('year', sa.Integer(), nullable=False),
         sa.Column('department_id', sa.Integer(), sa.ForeignKey('departments.dept_id'), nullable=False),
         sa.Column('coordinator_id', sa.Integer(), sa.ForeignKey('employees.emp_id'), nullable=True),
-        sa.PrimaryKeyConstraint('section_id')
+        sa.PrimaryKeyConstraint('section_id'),
+        sa.UniqueConstraint('department_id', 'year', 'section_name', name='uq_sections_dept_year_name')
     )
 
     # 2. Add section_id and year columns to students table
@@ -39,7 +40,7 @@ def upgrade() -> None:
     op.execute("""
         INSERT INTO sections (section_name, year, department_id)
         SELECT 'Sec 1', 1, dept_id FROM departments
-        ON CONFLICT DO NOTHING;
+        ON CONFLICT (department_id, year, section_name) DO NOTHING;
     """)
 
     # Map existing students who don't have a section to their department's default section and set year=1

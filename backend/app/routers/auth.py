@@ -82,12 +82,18 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     if email_taken:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists")
 
-    # Auto-assign section coordinator if section has one
+    # Auto-assign section coordinator if section has one and validate section match
     coordinator_id = None
     if payload.section_id:
         from app.models import Section
         sec = db.query(Section).filter(Section.section_id == payload.section_id).first()
-        if sec and sec.coordinator_id:
+        if not sec:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid section ID")
+        if payload.department_id and sec.department_id != payload.department_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Section does not belong to selected department")
+        if payload.year and sec.year != payload.year:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Section does not match selected year")
+        if sec.coordinator_id:
             coordinator_id = sec.coordinator_id
 
     student = Student(

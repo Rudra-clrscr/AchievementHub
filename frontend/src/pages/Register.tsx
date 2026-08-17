@@ -164,12 +164,13 @@ export function Register() {
             {!isEmployeeRole && departmentId && (
               <div className="field">
                 <label>Year of Study</label>
-                <select value={year} onChange={(e) => { setYear(e.target.value); setSectionId(""); }}>
+                <select value={year} onChange={(e) => { setYear(e.target.value); setSectionId(""); }} required>
                   <option value="">Select Year</option>
                   <option value="1">1st Year</option>
                   <option value="2">2nd Year</option>
                   <option value="3">3rd Year</option>
                   <option value="4">4th Year</option>
+                  <option value="5">Graduated</option>
                 </select>
               </div>
             )}
@@ -177,7 +178,7 @@ export function Register() {
             {!isEmployeeRole && departmentId && year && (
               <div className="field">
                 <label>Section / Class</label>
-                <select value={sectionId} onChange={(e) => setSectionId(e.target.value)}>
+                <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} required={sections.length > 0}>
                   <option value="">Select Section</option>
                   {sections.map((s) => (
                     <option key={s.section_id} value={s.section_id}>
