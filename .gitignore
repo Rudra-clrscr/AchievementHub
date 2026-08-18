@@ -7,3 +7,13 @@ backend/uploads/
 frontend/node_modules/
 frontend/dist/
 .DS_Store
+
+# Data import & temporary utility scripts
+backend/*_rows.csv
+backend/import_prod_data.py
+backend/fix_sequences.py
+backend/reset_test_passwords.py
+backend/seed_sections.py
+backend/add_aiml_dept.py
+backend/rename_depts.py
+

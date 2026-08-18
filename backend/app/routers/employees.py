@@ -85,11 +85,24 @@ def assign_hod(
     if hod is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="HOD not found in your department")
 
-    # Keep department_id in sync with the assigned HOD's department -- mirrors
-    # assign_coordinator's reasoning: faculty_verifier_scope_filter's admin
-    # branch is department-based, so an unassigned faculty member would
-    # vanish from every admin's queue the moment they're assigned a HOD,
-    # even though the hod_id-based branch would still show them correctly.
+    # Enforce single HOD per department check:
+    # If assigned HOD is already HOD for another faculty in department, that's fine.
+    # But if someone tries to create multiple different HODs for same dept, reject.
+    existing_hods = (
+        db.query(Employee)
+        .filter(
+            Employee.department_id == admin.department_id,
+            Employee.roles.any(EmployeeRoleAssignment.role == EmployeeRole.hod),
+            Employee.emp_id != hod.emp_id,
+        )
+        .all()
+    )
+    if existing_hods:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A different HOD is already assigned to this department"
+        )
+
     faculty.hod_id = hod.emp_id
     faculty.department_id = admin.department_id
     db.commit()

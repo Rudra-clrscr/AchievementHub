@@ -102,10 +102,10 @@ export function CoordinatorDashboard() {
     { key: "submit", label: "Submit Achievement" },
     ...(isAdmin
       ? [
-          { key: "students", label: "Students" },
-          { key: "faculty", label: "Faculty" },
-          { key: "registrations", label: "Registrations" },
-        ]
+        { key: "students", label: "Students" },
+        { key: "faculty", label: "Faculty" },
+        { key: "registrations", label: "Registrations" },
+      ]
       : []),
   ];
   const [view, setView] = useState<string>("achievements");
@@ -170,23 +170,23 @@ export function CoordinatorDashboard() {
             <DashboardOverview token={token} onAdd={() => setView("submit")} />
           ) : view === "submit" ? (
             <div className="page">
-            <AchievementSubmitSection
-              title="Faculty Achievement"
-              idKey="id"
-              fields={[
-                { name: "title", label: "Title", type: "text", required: true },
-                { name: "category", label: "Category", type: "select", options: FACULTY_CATEGORIES, required: true },
-                { name: "description", label: "Description", type: "textarea" },
-                { name: "level", label: "Achievement Level", type: "select", options: ["", "College", "University", "State", "National", "International"] },
-                { name: "date", label: "Date of Achievement", type: "date", required: true },
-                { name: "organization", label: "Organization/Institution", type: "text" },
-                { name: "event_name", label: "Event/Conference Name", type: "text" },
-              ]}
-              api={achievementsApi}
-              token={token}
-              category="achievements"
-            />
-          </div>
+              <AchievementSubmitSection
+                title="Faculty Achievement"
+                idKey="id"
+                fields={[
+                  { name: "title", label: "Title", type: "text", required: true },
+                  { name: "category", label: "Category", type: "select", options: FACULTY_CATEGORIES, required: true },
+                  { name: "description", label: "Description", type: "textarea" },
+                  { name: "level", label: "Achievement Level", type: "select", options: ["", "College", "University", "State", "National", "International"] },
+                  { name: "date", label: "Date of Achievement", type: "date", required: true },
+                  { name: "organization", label: "Organization/Institution", type: "text" },
+                  { name: "event_name", label: "Event/Conference Name", type: "text" },
+                ]}
+                api={achievementsApi}
+                token={token}
+                category="achievements"
+              />
+            </div>
           ) : view === "students" ? (
             <StudentAssignment token={token} />
           ) : view === "faculty" ? (
