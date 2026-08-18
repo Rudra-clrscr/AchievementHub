@@ -85,24 +85,11 @@ def assign_hod(
     if hod is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="HOD not found in your department")
 
-    # Enforce single HOD per department check:
-    # If assigned HOD is already HOD for another faculty in department, that's fine.
-    # But if someone tries to create multiple different HODs for same dept, reject.
-    existing_hods = (
-        db.query(Employee)
-        .filter(
-            Employee.department_id == admin.department_id,
-            Employee.roles.any(EmployeeRoleAssignment.role == EmployeeRole.hod),
-            Employee.emp_id != hod.emp_id,
-        )
-        .all()
-    )
-    if existing_hods:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A different HOD is already assigned to this department"
-        )
-
+    # Keep department_id in sync with the assigned HOD's department -- mirrors
+    # assign_coordinator's reasoning: faculty_verifier_scope_filter's admin
+    # branch is department-based, so an unassigned faculty member would
+    # vanish from every admin's queue the moment they're assigned a HOD,
+    # even though the hod_id-based branch would still show them correctly.
     faculty.hod_id = hod.emp_id
     faculty.department_id = admin.department_id
     db.commit()
@@ -149,6 +136,27 @@ def approve_registration(
     ).first()
     if employee is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pending registration not found")
+
+    # One HOD per department: reject the *approval* rather than blocking every
+    # future assign_hod call for the department -- approving is the point
+    # where a second HOD would actually come into existence, so that's where
+    # to stop it. Existing multi-HOD departments (approved before this check
+    # existed) are left alone; this only guards new approvals going forward.
+    if employee.department_id is not None and EmployeeRole.hod in {a.role for a in employee.roles}:
+        existing_hod = (
+            db.query(Employee)
+            .filter(
+                Employee.department_id == employee.department_id,
+                Employee.is_approved == True,  # noqa: E712
+                Employee.roles.any(EmployeeRoleAssignment.role == EmployeeRole.hod),
+            )
+            .first()
+        )
+        if existing_hod is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{existing_hod.name} is already the approved HOD for this department",
+            )
 
     employee.is_approved = True
     db.commit()
