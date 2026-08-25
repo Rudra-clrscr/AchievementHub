@@ -112,10 +112,20 @@ class AchievementOut(BaseModel):
     submitted_at: datetime
     verified_by: int | None
     verified_at: datetime | None
+    approved_by: int | None = None
+    approved_at: datetime | None = None
     thumbnail_url: str | None
     metadata_fields: dict | None
 
     model_config = {"from_attributes": True}
+
+
+class ReviewedAchievementOut(AchievementOut):
+    """A record in a verifier's own review history. Carries the owner's name so
+    the list is readable without a second round trip -- a coordinator scanning
+    what they signed off needs to see whose achievement it was."""
+
+    owner_name: str | None = None
 
 
 class StudentOut(BaseModel):

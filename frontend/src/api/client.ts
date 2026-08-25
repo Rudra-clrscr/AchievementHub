@@ -70,6 +70,17 @@ export interface AchievementRecord {
   [key: string]: unknown;
 }
 
+export interface ReviewedAchievement extends AchievementRecord {
+  id: number;
+  title: string;
+  category: string;
+  owner_name: string | null;
+  approved_by: number | null;
+  approved_at: string | null;
+}
+
+export type ReviewedStatus = "verified" | "approved" | "rejected";
+
 export interface UploadResult {
   file_url: string;
   original_size: number;
@@ -107,6 +118,15 @@ export function makeAchievementApi(basePath: string) {
       request<AchievementRecord>(basePath, { method: "POST", body: JSON.stringify(payload) }, token),
     mine: (token: string) => request<AchievementRecord[]>(`${basePath}/mine`, {}, token),
     pending: (token: string) => request<AchievementRecord[]>(`${basePath}/pending`, {}, token),
+    // Everything this verifier has personally signed off, whatever tier they
+    // acted at. Distinct from pending(), which is scope-based and shrinks as
+    // records move on; this is history and does not.
+    reviewed: (token: string, status?: ReviewedStatus) =>
+      request<ReviewedAchievement[]>(
+        `${basePath}/reviewed${status ? `?status=${status}` : ""}`,
+        {},
+        token
+      ),
     verify: (token: string, id: number, approve: boolean, remarks?: string) =>
       request<AchievementRecord>(
         `${basePath}/${id}/verify`,

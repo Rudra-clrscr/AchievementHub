@@ -52,6 +52,117 @@ Every uploaded file (any type, any size — that's a selling point of the app) i
 - **Editor round-trip metadata is dead weight.** PDFs from design tools (seen from Adobe Illustrator) can embed the *entire native source file* via `PieceInfo`/`AIPDFPrivateData*`, purely so the tool can reopen it for further editing — no PDF viewer ever reads it. Stripping it is lossless for anyone just viewing the file and can be the single biggest size win on such files (measured: one real file went from 2.43MB to 159KB, zero image/font changes).
 - **Bounded, not perfect.** A wall-clock budget (`RECOMPRESS_TIME_BUDGET_SECONDS`) caps total per-file recompression time regardless of page/image count. Some large multi-image documents (e.g. a 51-page slide deck with 9+ real images) legitimately won't hit the 250KB target without visible quality loss — the target is a goal, not a guarantee.
 
+## Review history: the two verification signatures (`achievements.verified_by` vs `approved_by`)
+
+A verifier can see everything they have personally signed off, at
+`GET /achievements/reviewed` and under **Review History** in the coordinator
+dashboard. Faculty and HODs see what they verified; admins see what they
+approved. Optional `?status=verified|approved|rejected` filters the list.
+
+**This needed a schema change to work at all.** Both tiers used to write
+`verified_by`/`verified_at`, so an admin approval overwrote the coordinator who
+did tier 1. A coordinator asking "what have I reviewed?" would have lost
+precisely the records that completed the pipeline — the ones they would most
+want to see. Migration `e5c71b9a3d80` adds `approved_by`/`approved_at`; tier 2
+now signs those and leaves `verified_by` alone.
+
+Things worth knowing before touching this:
+
+- **History is keyed off the signature, not off the scope filters.** Scope
+  answers "what may I review *now*?" and legitimately changes — a student is
+  reassigned to another coordinator, a faculty member moves department. History
+  must not rewrite itself when that happens. If you signed it, you can still
+  see it.
+- **One record can appear for two people, and that is correct.** The
+  coordinator who verified it and the admin who then approved it each reviewed
+  it, and each sees it in their own list.
+- **A multi-role employee gets a different list per active role**, matching how
+  the rest of the app treats the role picked at login: what they verified as
+  faculty and what they approved as admin are separate histories.
+- **The list is ordered and dated by the acting tier's own timestamp** —
+  `approved_at` for an admin, `verified_at` for everyone else. Using
+  `submitted_at` for both would make the two lists indistinguishable.
+- **Backfill limits.** The migration copies `verified_by` into `approved_by`
+  for rows already `approved`, since for those the last actor was an admin. The
+  original tier-1 verifier on those rows is genuinely unrecoverable — it was
+  overwritten before the column existed — so it is left as-is rather than
+  invented. Rows in `rejected` are left alone entirely: either tier can reject
+  and the data cannot say which one did. **Pre-migration history is therefore
+  approximate; everything from this migration forward is exact.**
+
+## Tests (`backend/tests/`)
+
+Run them from `backend/`:
+
+```
+pip install -r requirements.txt -r requirements-dev.txt
+pytest
+```
+
+220 tests, ~20 seconds, no setup and no services. What to know before adding to them:
+
+- **They cannot reach production.** `tests/conftest.py` pins `DATABASE_URL` to in-memory SQLite *before* `app.*` is imported (env vars outrank `backend/.env` in pydantic-settings), then asserts that the URL the app actually resolved is the test one and refuses to start otherwise. Never weaken that assertion — the suite calls `drop_all()` between every test.
+- **SQLite is the default, not the whole story.** Set `TEST_DATABASE_URL` to a scratch Postgres database to run the same suite against the real dialect. Worth doing before trusting a migration: SQLite will not reproduce Postgres-specific behaviour such as the missing `json` equality operator that forced `union_all()` instead of `union()` in the pending queue.
+- **bcrypt runs at 4 rounds in tests** (`pwd_context.update(bcrypt__default_rounds=4)`). This is what takes the suite from two minutes to five seconds; production cost is untouched. A suite nobody waits for is a suite nobody runs.
+- **`tests/conftest.py` holds a `Factory`** that builds departments, sections, employees with role sets, students, and achievements. Use it rather than hand-rolling objects, and use the `as_employee` / `as_student` / `as_pending_employee` fixtures for auth headers — `as_employee(person, role)` mints a token for one *active* role, which is how a multi-role account actually behaves per session.
+
+What is covered, and why those things:
+
+| File | Protects |
+|---|---|
+| `test_auth.py` | Who can get a token for what role: pre-login role choice, the role picker, unapproved employees, self-registration limits, section-derived department/year, and that a pending role-selection token opens nothing role-gated |
+| `test_achievements.py` | The `pending -> verified -> approved` pipeline, plus every scope filter: faculty see their own students, HODs see their assigned faculty, admins see their department, principals see nothing |
+| `test_employees_admin.py` | The 2026-08-18 one-HOD regression from both sides, HOD assignment, registration approval, and admin-only gating on every endpoint |
+| `test_students_admin.py` | The Department-Year-Section hierarchy, including the section-coordinator cascade onto already-enrolled students |
+| `test_feed.py` | The only unauthenticated read surface — that nothing unapproved reaches it through any filter |
+| `test_uploads.py` | The compression pipeline: content classification, the never-grow and never-corrupt invariants, OOXML media keeping its original format, and the fallback to raw bytes when compression fails. `httpx.post` is replaced by a recorder, so it also pins exactly what would be sent to Supabase Storage |
+
+**The regression tests are load-bearing, not decorative.** Re-introducing the pre-fix `assign_hod` guard makes three tests in `test_employees_admin.py` fail in five seconds with the exact production symptom (`403 "A different HOD is already assigned to this department"`). That check was verified by actually doing it, not assumed.
+
+Two bugs the suite found on its first run, both now fixed:
+
+- **Verifier remarks were silently discarded on any record that already had metadata.** `verify_achievement` mutated `record.metadata_fields` in place and reassigned the same dict object. `metadata_fields` is a plain `JSON` column with no mutation tracking, so SQLAlchemy saw no net change (`History(added=(), unchanged=[...])`), dropped the column from the `UPDATE`, and the remarks vanished. Records with `NULL` metadata worked *by accident*, because `or {}` produced a genuinely new object — which is exactly why it survived manual testing: the plain-certificate case is the one anyone would try by hand. Patents, publications and internships carry metadata, so rejecting one told the student nothing about why. Fixed by building a new dict. **If you ever add another writer to a JSON column, do the same or wrap the column in `MutableDict`.**
+- No CI existed. See below.
+
+### Frontend tests (`frontend/src/**/*.test.{ts,tsx}`)
+
+Run them from `frontend/`:
+
+```
+npm install
+npm test
+```
+
+41 tests on vitest + jsdom + Testing Library. `vitest.config.ts` is deliberately
+separate from `vite.config.ts` so nothing about the test setup can reach the
+production build. `src/test/setup.ts` pins `VITE_API_BASE` so URL assertions do
+not depend on a developer's `.env`, and clears storage between tests.
+
+The weight is on `src/api/client.ts`, because that is where the non-obvious
+behaviour lives:
+
+- **Cold-start retries.** Network-level failures are retried on a
+  `[1s, 3s, 8s, 15s]` backoff; genuine HTTP errors are not, since retrying a 401
+  cannot change the answer and would turn every failed login into five requests.
+  Both halves of that rule are pinned.
+- **`uploadFile` must not set `Content-Type`.** Setting it by hand omits the
+  multipart boundary and the backend rejects every upload. There is a test
+  asserting the header is absent.
+
+Note that `tsc -b` type-checks the test files too (they live under `src`), so a
+broken mock signature fails `npm run build`. That is intentional -- CI runs the
+build after the tests for exactly that reason.
+
+## CI (`.github/workflows/tests.yml`)
+
+Three jobs on every push to `main` and every PR:
+
+- **`pytest`** — the suite above. No secrets, no service containers.
+- **`frontend`** — vitest, then `npm run build` (which type-checks).
+- **`migrations`** — asserts Alembic has exactly one head. A branch whose migration sets `down_revision` to an older revision forks the graph, and `alembic upgrade head` then fails outright against production. That has already happened on this repo and is still sitting unmerged on `origin/dev-main`; this catches it at PR time instead of at deploy time.
+
+This repo takes merges from several people plus two bot authors (`google-labs-jules`, `copilot-swe-agent`). CI is what makes those PRs reviewable rather than hand-tested.
+
 ## Free-tier hosting quirks worth knowing
 
 - Render's free-tier backend spins down when idle and cold-starts on the next request. While booting, requests fail at the network level (no HTTP response at all), which browsers report as a **CORS block** even though CORS itself is configured correctly — there's just no response to carry the headers. The frontend retries network-level failures with backoff (`frontend/src/api/client.ts`) to ride this out transparently; don't chase a reported "CORS error" at face value without first checking whether it's actually this.

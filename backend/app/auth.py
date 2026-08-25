@@ -124,7 +124,23 @@ def get_current_identity(
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
 ) -> Employee | Student:
     payload = _decode_token(token)
-    model = Student if payload.get("entity_type") == "student" else Employee
+    entity_type = payload.get("entity_type")
+    # Match the two session kinds explicitly rather than treating "not a
+    # student" as "an employee". The loose version let the role-selection
+    # token (entity_type "employee_pending") through on the Employee branch,
+    # so a session that had passed the password check but not yet picked a
+    # role could still read /auth/me and submit achievements for five
+    # minutes. Role-gated dependencies were never exposed -- they check the
+    # `role` claim, which a pending token does not carry -- but "has no
+    # active role" should mean no session at all, not a partial one.
+    if entity_type == "student":
+        model = Student
+    elif entity_type == "employee":
+        model = Employee
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token"
+        )
     entity = db.get(model, int(payload["sub"]))
     if entity is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account not found")

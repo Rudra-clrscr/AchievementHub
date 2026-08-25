@@ -53,8 +53,15 @@ class AchievementMixin:
         Enum(CertificateStatus), nullable=False, default=CertificateStatus.pending
     )
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Tier 1 (faculty/HOD): who moved this out of the pending queue.
     verified_by: Mapped[int | None] = mapped_column(ForeignKey("employees.emp_id"))
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Tier 2 (admin): who made the final approve/reject call. Kept separate
+    # rather than reusing verified_by, which both tiers used to write -- an
+    # admin approval overwrote the faculty signature, so a coordinator asking
+    # "what have I reviewed?" lost precisely the records that completed.
+    approved_by: Mapped[int | None] = mapped_column(ForeignKey("employees.emp_id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_featured: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
     thumbnail_url: Mapped[str | None] = mapped_column(String(500))
 
@@ -106,6 +113,7 @@ class Employee(Base):
     coordinated_sections: Mapped[list[Section]] = relationship(back_populates="coordinator")
     achievements: Mapped[list["Achievement"]] = relationship("Achievement", foreign_keys="[Achievement.employee_id]", back_populates="employee")
     verified_achievements: Mapped[list["Achievement"]] = relationship("Achievement", foreign_keys="[Achievement.verified_by]", back_populates="verifier")
+    approved_achievements: Mapped[list["Achievement"]] = relationship("Achievement", foreign_keys="[Achievement.approved_by]", back_populates="approver")
     roles: Mapped[list["EmployeeRoleAssignment"]] = relationship(back_populates="employee", cascade="all, delete-orphan")
     hod: Mapped["Employee | None"] = relationship(remote_side=[emp_id], foreign_keys=[hod_id], back_populates="supervised_faculty")
     supervised_faculty: Mapped[list["Employee"]] = relationship(foreign_keys=[hod_id], back_populates="hod")
@@ -178,4 +186,5 @@ class Achievement(AchievementMixin, Base):
     student: Mapped[Student | None] = relationship(back_populates="achievements")
     employee: Mapped[Employee | None] = relationship("Employee", foreign_keys="[Achievement.employee_id]", back_populates="achievements")
     verifier: Mapped[Employee | None] = relationship("Employee", foreign_keys="[Achievement.verified_by]", back_populates="verified_achievements")
+    approver: Mapped[Employee | None] = relationship("Employee", foreign_keys="[Achievement.approved_by]", back_populates="approved_achievements")
 

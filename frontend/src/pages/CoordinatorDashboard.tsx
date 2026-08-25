@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { achievementsApi, FACULTY_CATEGORIES, type AchievementRecord } from "../api/client";
+import { ReviewedSection } from "../components/ReviewedSection";
 import { useAuth } from "../auth/AuthContext";
 import { AchievementPendingSection, AchievementSubmitSection, StatusBadge } from "../components/AchievementSection";
 import { StudentAssignment } from "../components/StudentAssignment";
@@ -98,6 +99,7 @@ export function CoordinatorDashboard() {
   const isAdmin = ADMIN_ROLES.includes(session!.role);
   const navItems: NavItem[] = [
     { key: "achievements", label: "Verification Queue" },
+    { key: "reviewed", label: "Review History" },
     { key: "my_achievements", label: "My Achievements" },
     { key: "submit", label: "Submit Achievement" },
     ...(isAdmin
@@ -123,6 +125,8 @@ export function CoordinatorDashboard() {
           title={
             view === "achievements"
               ? "Verification Queue"
+              : view === "reviewed"
+                ? (isAdmin ? "Achievements You Approved" : "Achievements You Verified")
               : view === "submit"
                 ? "Submit Achievement"
                 : view === "students"
@@ -166,6 +170,8 @@ export function CoordinatorDashboard() {
                 onCountChange={setPendingCount}
               />
             </>
+          ) : view === "reviewed" ? (
+            <ReviewedSection token={token} isAdmin={isAdmin} />
           ) : view === "my_achievements" ? (
             <DashboardOverview token={token} onAdd={() => setView("submit")} />
           ) : view === "submit" ? (
