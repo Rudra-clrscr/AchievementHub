@@ -82,6 +82,13 @@ Things worth knowing before touching this:
 - **The list is ordered and dated by the acting tier's own timestamp** —
   `approved_at` for an admin, `verified_at` for everyone else. Using
   `submitted_at` for both would make the two lists indistinguishable.
+- **Migrations are applied by hand, always.** `render.yaml` runs
+  `pip install` then `uvicorn` -- nothing calls `alembic upgrade`, so a deploy
+  never migrates. `e5c71b9a3d80` was applied to production on 2026-08-25 via
+  the Supabase SQL editor (rendered with `alembic upgrade <from>:<to> --sql`,
+  run inside a single transaction, with `alembic_version` stamped in the same
+  transaction). Any future migration needs the same treatment; merging a PR
+  does not migrate anything.
 - **Backfill limits.** The migration copies `verified_by` into `approved_by`
   for rows already `approved`, since for those the last actor was an admin. The
   original tier-1 verifier on those rows is genuinely unrecoverable — it was
