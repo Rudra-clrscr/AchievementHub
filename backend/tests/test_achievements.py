@@ -927,3 +927,213 @@ def test_a_multi_role_employee_gets_the_history_of_the_role_they_logged_in_as(
 
     assert ids(as_faculty) == {verified_only, went_all_the_way}
     assert ids(as_admin) == {went_all_the_way}
+
+
+# --------------------------------------------------------------------------
+# Roster view: /achievements/by-owner
+# --------------------------------------------------------------------------
+#
+# Same scope as the pending queue, but pivoted person-first: each person the
+# verifier is responsible for, their approved history, and the records still
+# waiting on this verifier. The risks are the queue's risks -- scope leaking
+# sideways, and the wrong tier's records being offered as actionable.
+
+
+def owners(response):
+    return {item["name"]: item for item in response.json()}
+
+
+def test_coordinator_roster_lists_their_students_with_grouped_records(
+    client, factory, dept, coordinator, student, as_employee
+):
+    approved = factory.achievement(
+        student=student, title="Approved one", status=CertificateStatus.approved
+    )
+    waiting = factory.achievement(
+        student=student, title="Waiting on me", status=CertificateStatus.pending
+    )
+
+    response = client.get(
+        "/achievements/by-owner", headers=as_employee(coordinator, EmployeeRole.faculty)
+    )
+
+    assert response.status_code == 200
+    row = owners(response)["Assigned Student"]
+    assert row["owner_type"] == "student"
+    assert row["owner_id"] == student.student_id
+    assert row["email"] == student.email
+    assert [r["id"] for r in row["approved"]] == [approved.id]
+    assert [r["id"] for r in row["pending"]] == [waiting.id]
+
+
+def test_coordinator_roster_keeps_students_who_submitted_nothing(
+    client, coordinator, student, as_employee
+):
+    response = client.get(
+        "/achievements/by-owner", headers=as_employee(coordinator, EmployeeRole.faculty)
+    )
+
+    row = owners(response)["Assigned Student"]
+    assert row["approved"] == []
+    assert row["pending"] == []
+
+
+def test_coordinator_roster_excludes_students_of_another_coordinator(
+    client, factory, dept, coordinator, student, as_employee
+):
+    other = factory.employee(
+        roles=[EmployeeRole.faculty], department=dept, name="Other Coordinator"
+    )
+    theirs = factory.student(department=dept, coordinator=other, name="Not Mine")
+    factory.achievement(student=theirs, status=CertificateStatus.pending)
+
+    response = client.get(
+        "/achievements/by-owner", headers=as_employee(coordinator, EmployeeRole.faculty)
+    )
+
+    assert "Not Mine" not in owners(response)
+
+
+def test_coordinator_roster_holds_no_faculty(client, coordinator, hod, as_employee):
+    response = client.get(
+        "/achievements/by-owner", headers=as_employee(coordinator, EmployeeRole.faculty)
+    )
+
+    assert all(row["owner_type"] == "student" for row in response.json())
+
+
+def test_hod_roster_lists_assigned_faculty_not_students(
+    client, factory, coordinator, student, hod, as_employee
+):
+    waiting = factory.achievement(
+        employee=coordinator, title="Faculty pending", status=CertificateStatus.pending
+    )
+    approved = factory.achievement(
+        employee=coordinator, title="Faculty approved", status=CertificateStatus.approved
+    )
+
+    response = client.get("/achievements/by-owner", headers=as_employee(hod, EmployeeRole.hod))
+
+    rows = owners(response)
+    assert "Assigned Student" not in rows
+    faculty_row = rows["Section Coordinator"]
+    assert faculty_row["owner_type"] == "employee"
+    assert [r["id"] for r in faculty_row["pending"]] == [waiting.id]
+    assert [r["id"] for r in faculty_row["approved"]] == [approved.id]
+
+
+def test_hod_roster_excludes_faculty_assigned_to_another_hod(client, factory, dept, hod, as_employee):
+    other_hod = factory.employee(roles=[EmployeeRole.hod], department=dept, name="Other Head")
+    theirs = factory.employee(
+        roles=[EmployeeRole.faculty], department=dept, hod=other_hod, name="Their Faculty"
+    )
+    factory.achievement(employee=theirs, status=CertificateStatus.pending)
+
+    response = client.get("/achievements/by-owner", headers=as_employee(hod, EmployeeRole.hod))
+
+    assert "Their Faculty" not in owners(response)
+
+
+def test_admin_roster_covers_both_students_and_faculty_in_the_department(
+    client, factory, dept, admin, coordinator, student, as_employee
+):
+    factory.achievement(student=student, status=CertificateStatus.verified)
+    factory.achievement(employee=coordinator, status=CertificateStatus.verified)
+
+    response = client.get("/achievements/by-owner", headers=as_employee(admin, EmployeeRole.admin))
+
+    rows = owners(response)
+    assert rows["Assigned Student"]["owner_type"] == "student"
+    assert rows["Section Coordinator"]["owner_type"] == "employee"
+    assert len(rows["Assigned Student"]["pending"]) == 1
+    assert len(rows["Section Coordinator"]["pending"]) == 1
+
+
+def test_admin_roster_offers_verified_records_not_tier_one_pending(
+    client, factory, admin, student, as_employee
+):
+    tier_one = factory.achievement(student=student, status=CertificateStatus.pending)
+    mine = factory.achievement(student=student, status=CertificateStatus.verified)
+
+    response = client.get("/achievements/by-owner", headers=as_employee(admin, EmployeeRole.admin))
+
+    pending_ids = {r["id"] for r in owners(response)["Assigned Student"]["pending"]}
+    assert pending_ids == {mine.id}
+    assert tier_one.id not in pending_ids
+
+
+def test_coordinator_roster_offers_pending_not_records_awaiting_the_admin(
+    client, factory, coordinator, student, as_employee
+):
+    mine = factory.achievement(student=student, status=CertificateStatus.pending)
+    tier_two = factory.achievement(student=student, status=CertificateStatus.verified)
+
+    response = client.get(
+        "/achievements/by-owner", headers=as_employee(coordinator, EmployeeRole.faculty)
+    )
+
+    row = owners(response)["Assigned Student"]
+    assert {r["id"] for r in row["pending"]} == {mine.id}
+    assert tier_two.id not in {r["id"] for r in row["pending"]}
+    assert tier_two.id not in {r["id"] for r in row["approved"]}
+
+
+def test_roster_leaves_rejected_records_out(client, factory, coordinator, student, as_employee):
+    factory.achievement(student=student, status=CertificateStatus.rejected)
+
+    response = client.get(
+        "/achievements/by-owner", headers=as_employee(coordinator, EmployeeRole.faculty)
+    )
+
+    row = owners(response)["Assigned Student"]
+    assert row["approved"] == []
+    assert row["pending"] == []
+
+
+def test_admin_roster_does_not_list_the_admin_themselves(
+    client, factory, admin, coordinator, as_employee
+):
+    factory.achievement(employee=admin, status=CertificateStatus.verified)
+
+    response = client.get("/achievements/by-owner", headers=as_employee(admin, EmployeeRole.admin))
+
+    assert "Dept Admin" not in owners(response)
+
+
+def test_admin_roster_skips_unapproved_faculty_registrations(client, factory, dept, admin, as_employee):
+    factory.employee(
+        roles=[EmployeeRole.faculty], department=dept, name="Awaiting Approval", is_approved=False
+    )
+
+    response = client.get("/achievements/by-owner", headers=as_employee(admin, EmployeeRole.admin))
+
+    assert "Awaiting Approval" not in owners(response)
+
+
+def test_roster_rejects_students(client, student, as_student):
+    response = client.get("/achievements/by-owner", headers=as_student(student))
+
+    assert response.status_code == 403
+
+
+def test_roster_rejects_anonymous_callers(client):
+    assert client.get("/achievements/by-owner").status_code == 401
+
+
+def test_record_verified_from_the_roster_leaves_that_persons_pending_list(
+    client, factory, coordinator, student, as_employee
+):
+    """The roster doubles as a queue, so a decision taken there has to move the
+    record out of it -- the same way the Verification Queue drains."""
+    record = factory.achievement(student=student, status=CertificateStatus.pending)
+    headers = as_employee(coordinator, EmployeeRole.faculty)
+
+    verified = client.patch(
+        f"/achievements/{record.id}/verify", json={"approve": True}, headers=headers
+    )
+    assert verified.status_code == 200
+
+    row = owners(client.get("/achievements/by-owner", headers=headers))["Assigned Student"]
+    assert row["pending"] == []
+    # Tier 1 only reaches `verified`; it is not approved until the admin signs.
+    assert row["approved"] == []

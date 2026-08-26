@@ -31,6 +31,7 @@ beforeEach(() => {
   });
   vi.spyOn(achievementsApi, "pending").mockResolvedValue([]);
   vi.spyOn(achievementsApi, "reviewed").mockResolvedValue([]);
+  vi.spyOn(achievementsApi, "byOwner").mockResolvedValue([]);
 });
 
 describe("Review History availability", () => {
@@ -99,6 +100,33 @@ describe("Review History availability", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Review History" }));
     expect(
       await screen.findByRole("heading", { name: "Achievements You Approved" })
+    ).toBeInTheDocument();
+  });
+});
+
+describe("Roster availability", () => {
+  const ROSTER_LABEL: Record<string, string> = {
+    faculty: "My Students",
+    hod: "My Faculty",
+    admin: "Department Roster",
+  };
+
+  it.each(VERIFIER_ROLES)("names the roster for what %s is responsible for", async (role) => {
+    renderAs(role);
+
+    expect(
+      await screen.findByRole("button", { name: ROSTER_LABEL[role] })
+    ).toBeInTheDocument();
+  });
+
+  it.each(VERIFIER_ROLES)("opens a working roster panel for %s", async (role) => {
+    renderAs(role);
+
+    await userEvent.click(await screen.findByRole("button", { name: ROSTER_LABEL[role] }));
+
+    expect(achievementsApi.byOwner).toHaveBeenCalledWith("tok");
+    expect(
+      await screen.findByRole("heading", { name: ROSTER_LABEL[role] })
     ).toBeInTheDocument();
   });
 });

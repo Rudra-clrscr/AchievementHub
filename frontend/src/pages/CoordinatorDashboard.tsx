@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { achievementsApi, FACULTY_CATEGORIES, type AchievementRecord } from "../api/client";
 import { ReviewedSection } from "../components/ReviewedSection";
+import { RosterSection, rosterTitle } from "../components/RosterSection";
 import { useAuth } from "../auth/AuthContext";
 import { AchievementPendingSection, AchievementSubmitSection, StatusBadge } from "../components/AchievementSection";
 import { StudentAssignment } from "../components/StudentAssignment";
@@ -99,6 +100,10 @@ export function CoordinatorDashboard() {
   const isAdmin = ADMIN_ROLES.includes(session!.role);
   const navItems: NavItem[] = [
     { key: "achievements", label: "Verification Queue" },
+    // Same records as the queue, pivoted person-first: each assigned student
+    // (faculty) or faculty member (HOD) with their approved achievements and
+    // anything still waiting on this verifier.
+    { key: "roster", label: rosterTitle(session!.role) },
     { key: "reviewed", label: "Review History" },
     { key: "my_achievements", label: "My Achievements" },
     { key: "submit", label: "Submit Achievement" },
@@ -125,6 +130,8 @@ export function CoordinatorDashboard() {
           title={
             view === "achievements"
               ? "Verification Queue"
+              : view === "roster"
+                ? rosterTitle(session!.role)
               : view === "reviewed"
                 ? (isAdmin ? "Achievements You Approved" : "Achievements You Verified")
               : view === "submit"
@@ -170,6 +177,8 @@ export function CoordinatorDashboard() {
                 onCountChange={setPendingCount}
               />
             </>
+          ) : view === "roster" ? (
+            <RosterSection token={token} role={session!.role} />
           ) : view === "reviewed" ? (
             <ReviewedSection token={token} isAdmin={isAdmin} />
           ) : view === "my_achievements" ? (

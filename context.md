@@ -52,6 +52,45 @@ Every uploaded file (any type, any size — that's a selling point of the app) i
 - **Editor round-trip metadata is dead weight.** PDFs from design tools (seen from Adobe Illustrator) can embed the *entire native source file* via `PieceInfo`/`AIPDFPrivateData*`, purely so the tool can reopen it for further editing — no PDF viewer ever reads it. Stripping it is lossless for anyone just viewing the file and can be the single biggest size win on such files (measured: one real file went from 2.43MB to 159KB, zero image/font changes).
 - **Bounded, not perfect.** A wall-clock budget (`RECOMPRESS_TIME_BUDGET_SECONDS`) caps total per-file recompression time regardless of page/image count. Some large multi-image documents (e.g. a 51-page slide deck with 9+ real images) legitimately won't hit the 250KB target without visible quality loss — the target is a goal, not a guarantee.
 
+## Roster view: the verification queue, pivoted person-first
+
+`GET /achievements/by-owner` returns everyone a verifier is responsible for --
+faculty get their assigned students, a HOD gets the faculty assigned to them,
+an admin gets both across their department -- and for each person, their
+**approved** achievements plus the ones **still waiting on that verifier**. It
+renders under **My Students** / **My Faculty** / **Department Roster** in the
+coordinator dashboard, where each person expands to show both lists and the
+pending ones carry the same Approve/Decline controls the Verification Queue
+has.
+
+Things worth knowing before touching this:
+
+- **It reuses `verifier_scope_filter` and `faculty_verifier_scope_filter`
+  verbatim** -- the same two the pending queue uses -- so the roster can never
+  surface someone the verifier could not already review. The two filters are
+  complementary rather than overlapping: the student filter is a no-op for a
+  HOD, the employee filter is a no-op for faculty, so each role falls out with
+  the roster that makes sense for it and no per-role branching is needed.
+- **"Pending" means "waiting on *me*", not `status == "pending"`.** Faculty and
+  HOD act at tier 1 (`pending -> verified`), admin at tier 2
+  (`verified -> approved`), so the endpoint fills that list with whichever
+  status the caller can actually decide on -- mirroring `list_pending`. This is
+  what makes it safe for the UI to render decision buttons against every item
+  in it.
+- **People with nothing submitted are still listed.** A coordinator asking
+  "where is my class at?" needs to see the students who have submitted nothing;
+  dropping them would make the roster look complete when it isn't.
+- **Decisions go through the existing `PATCH /achievements/{id}/verify`.** The
+  roster is a second doorway onto the queue, not a second workflow -- there is
+  no roster-specific write path to keep in sync, and the frontend reloads after
+  each decision rather than guessing where the record moved.
+- **An admin does not appear in their own roster**, and unapproved employee
+  registrations don't either. Both are inside the department scope but neither
+  is someone the admin reviews; an admin's own records live under **My
+  Achievements**.
+- **No schema change was needed** -- this is a different projection of data the
+  pipeline already stores.
+
 ## Review history: the two verification signatures (`achievements.verified_by` vs `approved_by`)
 
 A verifier can see everything they have personally signed off, at

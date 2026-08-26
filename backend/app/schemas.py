@@ -128,6 +128,26 @@ class ReviewedAchievementOut(AchievementOut):
     owner_name: str | None = None
 
 
+class OwnerAchievementsOut(BaseModel):
+    """One person in a verifier's scope, with their achievements grouped.
+
+    `pending` is what *this* verifier can still act on, not simply what has
+    status `pending`: faculty/HOD act at tier 1 (pending -> verified), admin
+    at tier 2 (verified -> approved), so the same record is "waiting on me"
+    for exactly one of them at a time. Grouping this way lets the roster
+    double as a per-person verification queue -- the same decisions the
+    Verification Queue offers, but with the owner's approved history sitting
+    next to them for context.
+    """
+
+    owner_id: int
+    owner_type: str
+    name: str
+    email: str
+    approved: list[AchievementOut] = []
+    pending: list[AchievementOut] = []
+
+
 class StudentOut(BaseModel):
     student_id: int
     name: str

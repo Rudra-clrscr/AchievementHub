@@ -81,6 +81,28 @@ export interface ReviewedAchievement extends AchievementRecord {
 
 export type ReviewedStatus = "verified" | "approved" | "rejected";
 
+/** One person in a verifier's scope, with their achievements grouped.
+ *
+ * `pending` is what *this* verifier can still act on rather than literally
+ * status === "pending": faculty and HODs act at tier 1, admins at tier 2, so
+ * the backend fills this with whichever the caller can decide on. Rendering
+ * decision buttons against it is therefore always safe. */
+export interface OwnerAchievementRecord extends AchievementRecord {
+  id: number;
+  title: string;
+  category: string;
+  sub_category: string | null;
+}
+
+export interface OwnerAchievements {
+  owner_id: number;
+  owner_type: "student" | "employee";
+  name: string;
+  email: string;
+  approved: OwnerAchievementRecord[];
+  pending: OwnerAchievementRecord[];
+}
+
 export interface UploadResult {
   file_url: string;
   original_size: number;
@@ -127,6 +149,10 @@ export function makeAchievementApi(basePath: string) {
         {},
         token
       ),
+    // The same scope as pending(), pivoted person-first: everyone this
+    // verifier is responsible for, each with their approved history and the
+    // records still waiting on this verifier.
+    byOwner: (token: string) => request<OwnerAchievements[]>(`${basePath}/by-owner`, {}, token),
     verify: (token: string, id: number, approve: boolean, remarks?: string) =>
       request<AchievementRecord>(
         `${basePath}/${id}/verify`,

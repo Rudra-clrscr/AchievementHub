@@ -8,7 +8,13 @@ from sqlalchemy import or_
 from app.auth import get_current_identity, get_current_verifier, verifier_scope_filter, faculty_verifier_scope_filter
 from app.database import get_db
 from app.models import Achievement, CertificateStatus, Employee, OwnerType, Student, EmployeeRole
-from app.schemas import AchievementCreate, AchievementOut, AchievementVerify, ReviewedAchievementOut
+from app.schemas import (
+    AchievementCreate,
+    AchievementOut,
+    AchievementVerify,
+    OwnerAchievementsOut,
+    ReviewedAchievementOut,
+)
 
 router = APIRouter(prefix="/achievements", tags=["achievements"])
 
@@ -107,6 +113,106 @@ def list_pending(
     # Achievement.metadata_fields is `json`, which Postgres has none for,
     # so union() throws "could not identify an equality operator for type json".
     return student_records.union_all(employee_records).order_by(Achievement.submitted_at.asc()).all()
+
+
+@router.get("/by-owner", response_model=list[OwnerAchievementsOut])
+def list_by_owner(
+    verifier: Employee = Depends(get_current_verifier),
+    db: Session = Depends(get_db),
+):
+    """The verifier's own roster, person by person, with each person's
+    approved achievements and the ones still waiting on this verifier.
+
+    Scope is deliberately the *same* pair of filters the pending queue uses,
+    so this view can never surface someone the verifier could not already
+    review: faculty get their assigned students, HOD gets their assigned
+    faculty, admin gets both across their department. The two filters are
+    complementary rather than overlapping -- `verifier_scope_filter` is a
+    no-op for HOD and `faculty_verifier_scope_filter` is a no-op for faculty
+    -- so each role naturally ends up with only the roster that makes sense
+    for it.
+
+    People with nothing submitted are still listed. A coordinator asking
+    "where is my class at?" needs to see the students who have submitted
+    nothing at all; dropping them would make the roster look complete when
+    it isn't.
+    """
+    is_admin = verifier.active_role == EmployeeRole.admin.value
+    # Tier 2 acts on `verified`, tier 1 on `pending` -- mirrors list_pending.
+    actionable = CertificateStatus.verified if is_admin else CertificateStatus.pending
+
+    students = (
+        db.query(Student).filter(verifier_scope_filter(verifier)).order_by(Student.name).all()
+    )
+    employees = (
+        db.query(Employee)
+        .filter(
+            faculty_verifier_scope_filter(verifier),
+            Employee.is_approved == True,  # noqa: E712
+            # An admin is inside their own department scope. Their personal
+            # achievements belong under "My Achievements", not in the roster
+            # of people they review, and nobody reviews themselves.
+            Employee.emp_id != verifier.emp_id,
+        )
+        .order_by(Employee.name)
+        .all()
+    )
+
+    owners: list[OwnerAchievementsOut] = [
+        OwnerAchievementsOut(
+            owner_id=s.student_id, owner_type=OwnerType.student.value, name=s.name, email=s.email
+        )
+        for s in students
+    ] + [
+        OwnerAchievementsOut(
+            owner_id=e.emp_id, owner_type=OwnerType.employee.value, name=e.name, email=e.email
+        )
+        for e in employees
+    ]
+    if not owners:
+        return []
+
+    by_key = {(o.owner_type, o.owner_id): o for o in owners}
+    student_ids = [s.student_id for s in students]
+    employee_ids = [e.emp_id for e in employees]
+
+    # One query for every owner's records rather than one per owner: a
+    # coordinator with a full class would otherwise cost 60+ round trips.
+    conditions = []
+    if student_ids:
+        conditions.append(
+            (Achievement.owner_type == OwnerType.student)
+            & Achievement.student_id.in_(student_ids)
+        )
+    if employee_ids:
+        conditions.append(
+            (Achievement.owner_type == OwnerType.employee)
+            & Achievement.employee_id.in_(employee_ids)
+        )
+
+    records = (
+        db.query(Achievement)
+        .filter(
+            or_(*conditions),
+            Achievement.status.in_([CertificateStatus.approved, actionable]),
+        )
+        .order_by(Achievement.submitted_at.desc())
+        .all()
+    )
+
+    for record in records:
+        key = (
+            (OwnerType.student.value, record.student_id)
+            if record.owner_type == OwnerType.student
+            else (OwnerType.employee.value, record.employee_id)
+        )
+        owner = by_key.get(key)
+        if owner is None:
+            continue
+        bucket = owner.approved if record.status == CertificateStatus.approved else owner.pending
+        bucket.append(AchievementOut.model_validate(record))
+
+    return owners
 
 
 @router.patch("/{record_id}/verify", response_model=AchievementOut)

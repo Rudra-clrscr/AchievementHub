@@ -741,3 +741,109 @@
     margin-left: 54px;
   }
 }
+
+/* ---------- roster: people the verifier is responsible for ---------- */
+
+.roster-search {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  padding: 7px 12px;
+  font-size: 13px;
+  color: var(--text);
+  min-width: 220px;
+}
+.roster-owner {
+  border-bottom: 1px solid var(--border);
+}
+.roster-owner:last-child {
+  border-bottom: none;
+}
+.roster-owner-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 16px 0;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.roster-owner-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.roster-counts {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.roster-chevron {
+  color: var(--text-muted);
+  font-size: 12px;
+  width: 12px;
+  flex-shrink: 0;
+}
+.roster-owner-body {
+  padding: 4px 0 18px 54px;
+}
+.roster-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 14px 0 6px;
+}
+.roster-record {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.roster-record:last-child {
+  border-bottom: none;
+}
+.roster-record-main {
+  flex: 1;
+  min-width: 200px;
+}
+.roster-record-side {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.roster-record-pending {
+  background: var(--orange-100);
+  border-radius: var(--radius-sm);
+  border-bottom: none;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.roster-decide {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+}
+.roster-remarks {
+  flex: 1;
+  min-width: 180px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--text);
+}
