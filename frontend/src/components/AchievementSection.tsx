@@ -31,12 +31,6 @@ interface StudentProps {
   category: UploadCategory;
 }
 
-export function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
-}
-
 export function StatusBadge({ status }: { status: string }) {
   const cls = status === "approved" ? "badge-approved" : status === "verified" ? "badge-verified" : status === "rejected" ? "badge-rejected" : "badge-pending";
   const label = status === "approved" ? "Approved" : status === "verified" ? "Verified" : status === "rejected" ? "Rejected" : "Pending Review";
@@ -50,7 +44,6 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
   const [records, setRecords] = useState<AchievementRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<"uploading" | "saving" | null>(null);
-  const [lastCompression, setLastCompression] = useState<string | null>(null);
   const submitting = stage !== null;
 
   const refresh = () => {
@@ -68,10 +61,11 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
     }
     setStage("uploading");
     try {
+      // Compression happens server-side and is not surfaced: the before/after
+      // byte counts were an implementation detail that only invited "why did my
+      // file shrink?" questions. What the submitter needs to know is that the
+      // proof was accepted.
       const uploaded = await uploadFile(token, category, file);
-      setLastCompression(
-        `Uploaded ${formatBytes(uploaded.original_size)} -> stored ${formatBytes(uploaded.stored_size)}`
-      );
 
       const payload: Record<string, unknown> = { 
         title: form.title,
@@ -162,7 +156,6 @@ export function AchievementSubmitSection({ title, idKey, fields, api, token, cat
             </>
           )}
         </label>
-        {lastCompression && <p className="compression-note">{lastCompression}</p>}
         {error && <p className="field-error">{error}</p>}
 
         <div className="form-actions">

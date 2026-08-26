@@ -311,11 +311,6 @@
   color: var(--green-600);
   font-weight: 600;
 }
-.compression-note {
-  font-size: 12px;
-  color: var(--green-600);
-  margin: -10px 0 16px;
-}
 
 /* ---------- app shell (dashboard layouts) ---------- */
 
