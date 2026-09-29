@@ -129,7 +129,7 @@ export function Login() {
                 </p>
               )}
               <p className="auth-footer">
-                <Link to="/">&larr; Back</Link>
+                <Link to="/landing">&larr; Back</Link>
               </p>
             </>
           )}
